@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -9,7 +9,7 @@ import { discoverSourceFiles, findProjectRoot } from "./discoverFiles";
 import { extractImports } from "./extractImports";
 import { prepareRenderData } from "./prepareRenderData";
 import { safeUnzip } from "@/lib/safety/safeUnzip";
-import { deleteUploadBlob, saveAnalysis, validateUploadBlob } from "@/lib/storage/blob";
+import { deleteUpload, saveAnalysis } from "@/lib/storage/local";
 import type { AnalysisResult } from "@/types/graph";
 
 export type ProgressPhase = "validating" | "unzipping" | "parsing" | "clustering" | "detecting" | "layout" | "persisting";
@@ -17,22 +17,13 @@ export type ProgressReporter = (phase: ProgressPhase, detail: string) => void | 
 
 export class AnalysisError extends Error {}
 
-async function downloadZip(blobUrl: string, outputPath: string): Promise<void> {
-  const response = await fetch(blobUrl, { cache: "no-store" });
-  if (!response.ok) throw new AnalysisError("The uploaded zip could not be downloaded.");
-  await writeFile(outputPath, Buffer.from(await response.arrayBuffer()));
-}
-
-export async function analyzeRepository(blobUrl: string, report: ProgressReporter = () => {}): Promise<AnalysisResult> {
+export async function analyzeRepository(zipPath: string, report: ProgressReporter = () => {}): Promise<AnalysisResult> {
   await report("validating", "Checking the uploaded archive");
-  await validateUploadBlob(blobUrl);
 
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "cartograph-"));
   try {
-    const zipPath = path.join(temporaryDirectory, "repository.zip");
     const extractionDirectory = path.join(temporaryDirectory, "repository");
-    await report("unzipping", "Downloading and safely extracting the archive");
-    await downloadZip(blobUrl, zipPath);
+    await report("unzipping", "Safely extracting the archive");
     await safeUnzip(zipPath, extractionDirectory);
 
     const projectRoot = await findProjectRoot(extractionDirectory);
@@ -65,7 +56,7 @@ export async function analyzeRepository(blobUrl: string, report: ProgressReporte
     return result;
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
-    // A one-time Blob upload is not part of the shareable artifact and should not linger in storage.
-    await deleteUploadBlob(blobUrl).catch(() => undefined);
+    // Clean up the uploaded zip file.
+    await deleteUpload(zipPath);
   }
 }

@@ -13,11 +13,11 @@ function encodeEvent(event: StreamEvent): Uint8Array {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  let blobUrl: string;
+  let zipPath: string;
   try {
-    const body = (await request.json()) as { blobUrl?: unknown };
-    if (typeof body.blobUrl !== "string") throw new Error("blobUrl is required.");
-    blobUrl = body.blobUrl;
+    const body = (await request.json()) as { zipPath?: unknown };
+    if (typeof body.zipPath !== "string") throw new Error("zipPath is required.");
+    zipPath = body.zipPath;
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: 400 });
   }
@@ -26,7 +26,7 @@ export async function POST(request: Request): Promise<Response> {
   const writer = stream.writable.getWriter();
   void (async () => {
     try {
-      const result = await analyzeRepository(blobUrl, async (phase, detail) => {
+      const result = await analyzeRepository(zipPath, async (phase, detail) => {
         await writer.write(encodeEvent({ type: "progress", phase, detail }));
       });
       await writer.write(encodeEvent({ type: "result", shareUrl: result.shareUrl }));

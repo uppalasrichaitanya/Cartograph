@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { DiagramView } from "@/components/DiagramView";
-import { loadAnalysis } from "@/lib/storage/blob";
+import { loadAnalysis } from "@/lib/storage/local";
 
 export const dynamic = "force-dynamic";
 

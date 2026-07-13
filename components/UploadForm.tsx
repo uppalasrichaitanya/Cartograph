@@ -1,6 +1,5 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
 import { useRef, useState } from "react";
 import { ProgressStream, type ProgressState } from "./ProgressStream";
 
@@ -11,15 +10,11 @@ type StreamMessage =
   | { type: "result"; shareUrl: string }
   | { type: "error"; error: string };
 
-function sanitizeFilename(fileName: string): string {
-  return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
-}
-
-async function consumeAnalysisStream(blobUrl: string, onProgress: (progress: ProgressState) => void): Promise<string> {
+async function consumeAnalysisStream(zipPath: string, onProgress: (progress: ProgressState) => void): Promise<string> {
   const response = await fetch("/api/analyze/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ blobUrl }),
+    body: JSON.stringify({ zipPath }),
   });
   if (!response.ok || !response.body) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -70,15 +65,22 @@ export function UploadForm() {
     setError(null);
     setIsWorking(true);
     try {
-      setProgress({ phase: "validating", detail: "Uploading the archive directly to storage" });
-      const blob = await upload(`uploads/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`, file, {
-        access: "public",
-        handleUploadUrl: "/api/upload-url",
-        multipart: file.size > 4 * 1024 * 1024,
-        onUploadProgress: ({ percentage }) =>
-          setProgress({ phase: "validating", detail: `Uploading the archive (${Math.round(percentage)}%)` }),
+      setProgress({ phase: "validating", detail: "Uploading the archive to the server" });
+
+      // Upload the zip as multipart/form-data to the local upload endpoint.
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadResponse = await fetch("/api/upload-local", {
+        method: "POST",
+        body: formData,
       });
-      const shareUrl = await consumeAnalysisStream(blob.url, setProgress);
+      if (!uploadResponse.ok) {
+        const body = (await uploadResponse.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "Upload failed.");
+      }
+      const { tempPath } = (await uploadResponse.json()) as { tempPath: string };
+
+      const shareUrl = await consumeAnalysisStream(tempPath, setProgress);
       window.location.assign(shareUrl);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Upload or analysis failed.");
