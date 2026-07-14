@@ -129,6 +129,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
 
   const canvas = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useReactFlow();
@@ -201,13 +202,20 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
     setNodes((current) =>
       current.map((node) => {
         const isDimmed = activeIds ? !activeIds.has(node.id) : false;
-        const isSelected = selectedFile?.id === node.id || (selectedFile?.id === node.data.filePath);
+        const isHovered = node.id === hoveredFileId;
+        // Neighbor = connected to hovered/focus node but not the node itself.
+        const isNeighbor = !isHovered && hoverConnected != null && hoverConnected.has(node.id);
+        const isSelected = selectedFile?.id === node.id || selectedFile?.id === node.data.filePath;
+        const isPulsing = pulsingNodeId === node.id;
+
         const className = [
           isSelected ? "is-selected" : "",
-          isDimmed ? "is-dimmed" : "",
+          isPulsing ? "is-pulsing" : "",
+          // Neighbor takes priority over dimmed.
+          isDimmed && !isNeighbor ? "is-dimmed" : "",
+          isNeighbor && !isSelected ? "is-neighbor" : "",
         ].filter(Boolean).join(" ");
 
-        // Only update if className actually changed.
         if (node.className === className) return node;
         return { ...node, className };
       }),
@@ -233,7 +241,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         };
       }),
     );
-  }, [hoveredFileId, highlightMode, focusMode, selectedFile, edges.length, getHighlightedNodeIds, setNodes, setEdges]);
+  }, [hoveredFileId, highlightMode, focusMode, selectedFile, pulsingNodeId, edges.length, getHighlightedNodeIds, setNodes, setEdges]);
 
   /* ─── Navigate to a node: pan camera, highlight, update panel (Issue 1, 2) ─── */
   const navigateToNode = useCallback(
@@ -269,11 +277,15 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
       const panelOffset = selectedFile ? 100 : 0;
       reactFlowInstance.setCenter(nodeX + panelOffset, nodeY, { zoom: 1, duration: 300 });
 
-      // Update selection.
+      // Update selection and pulse.
       const graphNode = result.graph.nodes.find((n) => n.id === nodeId);
-      if (graphNode) setSelectedFile(graphNode);
+      if (graphNode) {
+        setSelectedFile(graphNode);
+        setPulsingNodeId(nodeId);
+        setTimeout(() => setPulsingNodeId(null), 800);
+      }
     },
-    [reactFlowInstance, result.graph.nodes, folder, selectedFile],
+    [reactFlowInstance, result.graph.nodes, folder, selectedFile, setPulsingNodeId],
   );
 
   /* ─── Node Click Handler ─── */
@@ -292,18 +304,35 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         const graphNode = result.graph.nodes.find((file) => file.id === node.data.filePath) ?? null;
         setSelectedFile(graphNode);
 
-        // Issue 1: Compensate viewport for panel.
-        if (graphNode) {
+        // After the CSS width transition fires, re-center on the node.
+        // Using transitionend is more robust than a hardcoded timeout.
+        if (graphNode && canvas.current) {
           const nodeX = (node.position.x ?? 0) + (node.measured?.width ?? 180) / 2;
           const nodeY = (node.position.y ?? 0) + (node.measured?.height ?? 60) / 2;
-          // Only shift if the node is in the right half of the viewport.
+
+          const handleTransitionEnd = (e: TransitionEvent) => {
+            if (e.propertyName !== "width") return;
+            canvas.current?.removeEventListener("transitionend", handleTransitionEnd);
+            reactFlowInstance.setCenter(nodeX, nodeY, { duration: 250 });
+          };
+          canvas.current.addEventListener("transitionend", handleTransitionEnd, { once: true });
+
+          // Fallback: if the panel was already open (no width transition), re-center immediately.
           requestAnimationFrame(() => {
-            reactFlowInstance.setCenter(nodeX + 100, nodeY, { duration: 300 });
+            // If the element already has has-panel-open, no transition will fire.
+            if (!canvas.current?.classList.contains("has-panel-open")) {
+              canvas.current?.removeEventListener("transitionend", handleTransitionEnd);
+              reactFlowInstance.setCenter(nodeX + 100, nodeY, { duration: 250 });
+            }
           });
+
+          // Pulse the node.
+          setPulsingNodeId(node.id);
+          setTimeout(() => setPulsingNodeId(null), 800);
         }
       }
     },
-    [result.graph.nodes, reactFlowInstance],
+    [result.graph.nodes, reactFlowInstance, setPulsingNodeId],
   );
 
   /* ─── Hover (graph nodes) ─── */
@@ -371,6 +400,14 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
   }, []);
 
   /* ─── Summary stats ─── */
+  const HIGHLIGHT_NAMES: Partial<Record<NonNullable<HighlightMode>, string>> = {
+    cycles: "Circular Dependencies",
+    hubs: "Dependency Hubs",
+    orphans: "Orphans",
+    warnings: "Warnings",
+    dependencies: "All Dependencies",
+  };
+
   const summary: { label: string; value: number; mode: HighlightMode }[] = [
     { label: "Files", value: result.graph.nodes.length, mode: null },
     { label: "Dependencies", value: result.graph.edges.length, mode: "dependencies" },
@@ -440,8 +477,23 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
 
       {layoutNotice && <p className="layout-notice" role="status">{layoutNotice}</p>}
 
+      {/* ─── Active filter banner (inside canvas area, above the ReactFlow) ─── */}
+      {highlightMode && (
+        <div className="filter-banner" role="status">
+          <span className="filter-banner-label">Highlighting:</span>
+          <span className="filter-banner-name">{HIGHLIGHT_NAMES[highlightMode] ?? highlightMode}</span>
+          <button
+            type="button"
+            className="filter-banner-clear"
+            onClick={() => setHighlightMode(null)}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* ─── Canvas (Issue 8, 18) ─── */}
-      <section className={`canvas-card ${isFading ? "is-fading" : ""}`} ref={canvas} aria-label="Interactive dependency diagram">
+      <section className={`canvas-card ${isFading ? "is-fading" : ""} ${selectedFile ? "has-panel-open" : ""}`} ref={canvas} aria-label="Interactive dependency diagram">
         <ReactFlow
           nodes={nodes}
           edges={edges}
