@@ -76,6 +76,17 @@ export type RenderData = {
   fileViewByFolder: Record<string, RenderGraph>;
 };
 
+export type RepoMeta = {
+  repoName: string;
+  language: string | null;
+  framework: string | null;
+  fileCount: number;
+  folderCount: number;
+  dependencyCount: number;
+  analysisTimestamp: string;
+  repoSizeBytes: number | null;
+};
+
 export type AnalysisResult = {
   id: string;
   createdAt: string;
@@ -85,4 +96,5 @@ export type AnalysisResult = {
   anomalies: Anomalies;
   parseErrors: ParseError[];
   renderData: RenderData;
+  repoMeta: RepoMeta;
 };

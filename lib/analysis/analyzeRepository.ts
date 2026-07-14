@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { buildGraph } from "./buildGraph";
 import { clusterByFolder } from "./clusterByFolder";
 import { detectAnomalies } from "./detectAnomalies";
+import { detectRepoMeta } from "./detectRepoMeta";
 import { discoverSourceFiles, findProjectRoot } from "./discoverFiles";
 import { extractImports } from "./extractImports";
 import { prepareRenderData } from "./prepareRenderData";
@@ -17,7 +18,20 @@ export type ProgressReporter = (phase: ProgressPhase, detail: string) => void | 
 
 export class AnalysisError extends Error {}
 
-export async function analyzeRepository(zipPath: string, report: ProgressReporter = () => {}): Promise<AnalysisResult> {
+export type AnalysisOptions = {
+  zipPath: string;
+  repoName?: string;
+  repoSizeBytes?: number;
+};
+
+export async function analyzeRepository(
+  optionsOrPath: string | AnalysisOptions,
+  report: ProgressReporter = () => {},
+): Promise<AnalysisResult> {
+  const options: AnalysisOptions =
+    typeof optionsOrPath === "string" ? { zipPath: optionsOrPath } : optionsOrPath;
+  const { zipPath, repoName = "Untitled Repository", repoSizeBytes = null } = options;
+
   await report("validating", "Checking the uploaded archive");
 
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "cartograph-"));
@@ -40,6 +54,8 @@ export async function analyzeRepository(zipPath: string, report: ProgressReporte
     await report("layout", "Computing a readable diagram layout");
     const renderData = await prepareRenderData(graph, clusters, anomalies);
 
+    const repoMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
+
     const id = randomUUID();
     const result: AnalysisResult = {
       id,
@@ -50,6 +66,7 @@ export async function analyzeRepository(zipPath: string, report: ProgressReporte
       anomalies,
       parseErrors,
       renderData,
+      repoMeta,
     };
     await report("persisting", "Saving the shareable diagram");
     await saveAnalysis(result);

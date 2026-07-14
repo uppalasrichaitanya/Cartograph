@@ -14,10 +14,14 @@ function encodeEvent(event: StreamEvent): Uint8Array {
 
 export async function POST(request: Request): Promise<Response> {
   let zipPath: string;
+  let repoName: string | undefined;
+  let repoSizeBytes: number | undefined;
   try {
-    const body = (await request.json()) as { zipPath?: unknown };
+    const body = (await request.json()) as { zipPath?: unknown; repoName?: unknown; repoSizeBytes?: unknown };
     if (typeof body.zipPath !== "string") throw new Error("zipPath is required.");
     zipPath = body.zipPath;
+    if (typeof body.repoName === "string") repoName = body.repoName;
+    if (typeof body.repoSizeBytes === "number") repoSizeBytes = body.repoSizeBytes;
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: 400 });
   }
@@ -26,9 +30,12 @@ export async function POST(request: Request): Promise<Response> {
   const writer = stream.writable.getWriter();
   void (async () => {
     try {
-      const result = await analyzeRepository(zipPath, async (phase, detail) => {
-        await writer.write(encodeEvent({ type: "progress", phase, detail }));
-      });
+      const result = await analyzeRepository(
+        { zipPath, repoName, repoSizeBytes },
+        async (phase, detail) => {
+          await writer.write(encodeEvent({ type: "progress", phase, detail }));
+        },
+      );
       await writer.write(encodeEvent({ type: "result", shareUrl: result.shareUrl }));
     } catch (error) {
       await writer.write(
