@@ -97,4 +97,14 @@ export type AnalysisResult = {
   parseErrors: ParseError[];
   renderData: RenderData;
   repoMeta: RepoMeta;
+  /**
+   * The validated, versioned Intermediate Representation built alongside
+   * the existing DependencyGraph. Optional for backward compatibility —
+   * analyses saved before Phase 7 will not have this field.
+   *
+   * Typed as `unknown` here to avoid coupling the legacy types module to
+   * the IR module. The actual shape is RepositoryIR (lib/analysis/ir/types.ts)
+   * and is validated by the IR Builder's finalize() before assignment.
+   */
+  repositoryIR?: unknown;
 };
