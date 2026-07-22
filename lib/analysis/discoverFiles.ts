@@ -1,8 +1,29 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import type { ProjectFile } from "./resolveAliases";
 
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx"]);
+/**
+ * Describes a discovered source file in the project.
+ *
+ * Previously defined in resolveAliases.ts. Moved here as part of
+ * the Milestone 2 migration to decouple file discovery from the
+ * legacy resolution module.
+ *
+ * Structurally compatible with ParseFileInput (absolutePath + relative path),
+ * but uses `filePath` for the relative path to maintain backward compatibility
+ * with the existing pipeline consumers.
+ */
+export type ProjectFile = {
+  absolutePath: string;
+  filePath: string;
+};
+
+/**
+ * Default source extensions for root signal detection.
+ * Used by findProjectRoot() to detect whether a directory looks like
+ * a project root. Also used as the fallback for discoverSourceFiles()
+ * when no registry-provided set is given.
+ */
+const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx"]);
 const EXCLUDED_DIRECTORIES = new Set(["node_modules", ".git", "dist", "build", ".next"]);
 export const MAX_SOURCE_FILES = 800;
 
@@ -16,14 +37,35 @@ export async function findProjectRoot(extractionDirectory: string): Promise<stri
       entry.name === "package.json" ||
       entry.name === "tsconfig.json" ||
       entry.name === "jsconfig.json" ||
-      SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()),
+      DEFAULT_SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()),
   );
   const directories = visibleEntries.filter((entry) => entry.isDirectory());
   if (!rootSignals && directories.length === 1) return path.join(extractionDirectory, directories[0].name);
   return extractionDirectory;
 }
 
-export async function discoverSourceFiles(projectRoot: string): Promise<ProjectFile[]> {
+/**
+ * Discover source files in the project directory.
+ *
+ * Walks the directory tree (excluding node_modules, .git, etc.) and
+ * collects files with supported extensions.
+ *
+ * @param projectRoot - Absolute path to the project root directory
+ * @param supportedExtensions - Optional set of file extensions (without dots)
+ *   to discover. When provided (e.g., from ParserRegistry.getRegisteredExtensions()),
+ *   only files with these extensions are discovered. When omitted, falls back
+ *   to the default set (.ts, .tsx, .js, .jsx).
+ */
+export async function discoverSourceFiles(
+  projectRoot: string,
+  supportedExtensions?: ReadonlySet<string>,
+): Promise<ProjectFile[]> {
+  // Normalize extensions to include leading dots for path.extname() comparison.
+  // Registry extensions come without dots (e.g., "ts"); the default set uses dots.
+  const extensions: ReadonlySet<string> = supportedExtensions
+    ? new Set([...supportedExtensions].map((ext) => (ext.startsWith(".") ? ext : `.${ext}`)))
+    : DEFAULT_SOURCE_EXTENSIONS;
+
   const discovered: ProjectFile[] = [];
   const walk = async (directory: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
@@ -34,7 +76,7 @@ export async function discoverSourceFiles(projectRoot: string): Promise<ProjectF
         await walk(fullPath);
         continue;
       }
-      if (!entry.isFile() || !SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+      if (!entry.isFile() || !extensions.has(path.extname(entry.name).toLowerCase())) continue;
       discovered.push({
         absolutePath: fullPath,
         filePath: path.relative(projectRoot, fullPath).split(path.sep).join("/"),

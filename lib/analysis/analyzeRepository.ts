@@ -7,8 +7,10 @@ import { clusterByFolder } from "./clusterByFolder";
 import { detectAnomalies } from "./detectAnomalies";
 import { detectRepoMeta } from "./detectRepoMeta";
 import { discoverSourceFiles, findProjectRoot } from "./discoverFiles";
-import { extractImports } from "./extractImports";
+import { extractAll, toLegacyResult } from "./extractAll";
 import { prepareRenderData } from "./prepareRenderData";
+import { ParserRegistry } from "./parsers/registry";
+import { TypeScriptParser } from "./parsers/typescript/parser";
 import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
 import { deleteUpload, saveAnalysis } from "@/lib/storage/local";
@@ -54,9 +56,33 @@ export async function analyzeRepository(
     const extractionResult = await safeUnzip(zipPath, extractionDirectory, undefined, eventLog);
 
     const projectRoot = await findProjectRoot(extractionDirectory);
-    const discoveredFiles = await discoverSourceFiles(projectRoot);
+
+    // --- Milestone 2: Parser Architecture ---
+    // Create a per-run registry. Register language parsers, then use
+    // registry-driven extensions for file discovery.
+    const registry = new ParserRegistry();
+    registry.register(new TypeScriptParser());
+
+    const legacyDiscovered = await discoverSourceFiles(
+      projectRoot,
+      registry.getRegisteredExtensions(),
+    );
+    // Convert ProjectFile[] → ParseFileInput[] (filePath → relativePath)
+    const discoveredFiles = legacyDiscovered.map((f) => ({
+      absolutePath: f.absolutePath,
+      relativePath: f.filePath,
+    }));
     await report("parsing", `Parsing ${discoveredFiles.length} source files`);
-    const { files, parseErrors } = await extractImports(projectRoot, discoveredFiles);
+
+    await registry.initializeAll({ projectRoot, discoveredFiles });
+    let parserExtractionResult;
+    try {
+      parserExtractionResult = await extractAll(projectRoot, discoveredFiles, registry);
+    } finally {
+      registry.disposeAll();
+    }
+
+    const { files, parseErrors } = toLegacyResult(parserExtractionResult);
     if (files.length === 0) throw new AnalysisError("No source files could be parsed successfully.");
 
     // --- Phase 6 integration: merge safety events into parseErrors ---
@@ -82,11 +108,11 @@ export async function analyzeRepository(
 
     const repoMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
 
-    // --- Phase 7 integration: build RepositoryIR alongside the legacy graph ---
-    // The IR is built from the same SourceFileAnalysis data the legacy pipeline
-    // uses. On success, it's attached to the AnalysisResult for persistence.
+    // --- Milestone 2 integration: build RepositoryIR from RawExtraction[] ---
+    // The IR is built directly from the extraction pipeline's RawExtraction[],
+    // preserving real IRParseError data (line, column, severity, reason).
     // On failure, it returns null and the legacy pipeline continues unaffected.
-    const repositoryIR = buildRepositoryIR(projectRoot, files);
+    const repositoryIR = buildRepositoryIR(projectRoot, parserExtractionResult.extractions);
 
     const id = randomUUID();
     const result: AnalysisResult = {
