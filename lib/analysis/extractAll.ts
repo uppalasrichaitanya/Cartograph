@@ -168,11 +168,14 @@ export async function extractAll(
     // Resolve each specifier from internalImports
     const internalImports = new Set<string>();
     const externalImports = new Set<string>();
+    const unresolvedInternalImports = new Set<string>();
 
     for (const specifier of extraction.internalImports) {
       const resolved = parser.resolveImport(specifier, file, discoveredFiles);
       if (resolved.resolved !== null) {
         internalImports.add(resolved.resolved);
+      } else if (resolved.unresolvedKind === "unresolved-internal") {
+        unresolvedInternalImports.add(specifier);
       } else {
         externalImports.add(specifier);
       }
@@ -184,6 +187,7 @@ export async function extractAll(
       lineCount: extraction.lineCount,
       internalImports: [...internalImports].sort(),
       externalImports: [...externalImports].sort(),
+      unresolvedInternalImports: [...unresolvedInternalImports].sort(),
       parseErrors: extraction.parseErrors,
       capabilitiesUsed: extraction.capabilitiesUsed,
     });

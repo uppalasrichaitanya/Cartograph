@@ -107,6 +107,22 @@ export interface ResolvedSpecifier {
   readonly resolved: string | null;
   /** Original raw specifier as written in source code. */
   readonly raw: string;
+  /**
+   * Classification of unresolved imports (only meaningful when resolved is null).
+   *
+   * - 'external': the import is external (stdlib, third-party). Default
+   *   when omitted — the TypeScript parser never sets this field, so all
+   *   its failed resolutions continue to be classified as external.
+   * - 'unresolved-internal': the import is syntactically incapable of being
+   *   external (relative imports, or absolute imports whose first segment
+   *   matches a known project package), but the full path does not resolve
+   *   to a real file. These should NOT become graph edges or be reclassified
+   *   as external — they represent broken internal references.
+   *
+   * Added in Milestone 3 (§4.1) for Python's three-outcome resolution.
+   * Pre-approved additive change — backward-compatible with all existing parsers.
+   */
+  readonly unresolvedKind?: "external" | "unresolved-internal";
 }
 
 // ---------------------------------------------------------------------------

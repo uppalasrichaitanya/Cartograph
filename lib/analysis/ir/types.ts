@@ -284,6 +284,11 @@ export interface RawExtraction {
   readonly internalImports: ReadonlyArray<string>;
   /** Imports determined to be external (npm packages, etc.). */
   readonly externalImports: ReadonlyArray<string>;
+  /** 
+   * Unresolved internal imports (e.g., broken relative imports or missing project modules). 
+   * Added in Milestone 3, Phase 4. 
+   */
+  readonly unresolvedInternalImports?: ReadonlyArray<string>;
   readonly parseErrors: ReadonlyArray<IRParseError>;
   readonly capabilitiesUsed: ReadonlyArray<ParserCapability>;
 }

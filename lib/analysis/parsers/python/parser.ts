@@ -5,6 +5,7 @@
  *
  * Created as part of Milestone 3, Phase 2 (PythonParser.initialize()).
  * Updated in Phase 3 to integrate tree-sitter-python WASM parsing.
+ * Updated in Phase 4 to implement resolveImport() with three-outcome classification.
  *
  * Lifecycle:
  *   - initialize(): reads pyproject.toml/setup.cfg, detects the import root
@@ -13,7 +14,9 @@
  *   - parseFile(): uses tree-sitter-python to parse source and extract
  *     import specifiers from the AST. Returns RawExtraction with
  *     unresolved specifiers in internalImports.
- *   - resolveImport(): stub — will be implemented in Phase 4.
+ *   - resolveImport(): resolves specifiers against the PythonPackageIndex
+ *     with three-outcome classification (§4.1): resolved-internal,
+ *     unresolved-internal, or external.
  *   - dispose(): releases the cached package index and parser state.
  *
  * Design:
@@ -44,6 +47,7 @@ import {
 } from "./packageIndex";
 import { ensureInitialized, parsePythonSourceSync } from "./treeSitter";
 import { extractImports } from "./importExtractor";
+import { resolveImport as resolveImportImpl } from "./importResolver";
 
 // ---------------------------------------------------------------------------
 // Python Parser
@@ -213,25 +217,39 @@ export class PythonParser implements LanguageParser {
   /**
    * Resolve a raw Python import specifier.
    *
-   * STUB — Phase 4 will implement full absolute + relative resolution
-   * against the PythonPackageIndex.
+   * Implements the three-outcome classification from §4.1:
+   *   1. Resolved-internal: specifier lands on a real file in the project.
+   *      Returns { resolved: "path/to/file.py", raw }.
+   *   2. Unresolved-internal: relative import or absolute import matching
+   *      a known package, but no file found. Returns
+   *      { resolved: null, raw, unresolvedKind: "unresolved-internal" }.
+   *   3. External: stdlib or third-party. Returns
+   *      { resolved: null, raw, unresolvedKind: "external" }.
    *
-   * Current behavior: returns { resolved: null, raw: specifier },
-   * classifying everything as external. This satisfies the LanguageParser
-   * contract (resolveImport NEVER throws) and matches the existing
-   * orchestrator behavior for unresolved imports.
+   * NEVER throws — per the LanguageParser contract.
    *
    * @param specifier  - Raw import specifier as written in source code
-   * @param _fromFile  - The file containing the import (unused in stub)
-   * @param _knownFiles - All discovered project files (unused in stub)
+   * @param fromFile   - The file containing the import
+   * @param _knownFiles - All discovered project files (unused — resolution
+   *                      uses the PythonPackageIndex, not the file list)
    */
   resolveImport(
     specifier: string,
-    _fromFile: ParseFileInput,
+    fromFile: ParseFileInput,
     _knownFiles: ReadonlyArray<ParseFileInput>,
   ): ResolvedSpecifier {
-    // Phase 4 stub: classify everything as external.
-    return { resolved: null, raw: specifier };
+    if (!this.packageIndex || !this.projectRoot) {
+      // Not initialized — classify everything as external.
+      // This should never happen if the lifecycle is followed correctly.
+      return { resolved: null, raw: specifier };
+    }
+
+    return resolveImportImpl(
+      specifier,
+      fromFile,
+      this.packageIndex,
+      this.projectRoot,
+    );
   }
 
   /**
