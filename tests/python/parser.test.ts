@@ -429,7 +429,7 @@ test("PythonParser: initialize() produces deterministic results across runs", as
 // Stub Behavior — parseFile() and resolveImport()
 // ---------------------------------------------------------------------------
 
-test("PythonParser: parseFile() stub returns valid empty RawExtraction", async () => {
+test("PythonParser: parseFile() extracts imports", async () => {
   const root = await createTempProject();
   try {
     await writeProjectFile(root, "app.py", "import os\nimport sys\n");
@@ -446,7 +446,7 @@ test("PythonParser: parseFile() stub returns valid empty RawExtraction", async (
 
     assert.equal(result.path, "app.py");
     assert.equal(result.lineCount, 3); // 2 lines + trailing newline
-    assert.deepEqual([...result.internalImports], []);
+    assert.deepEqual([...result.internalImports], ["os", "sys"]);
     assert.deepEqual([...result.externalImports], []);
     assert.deepEqual([...result.parseErrors], []);
     assert.deepEqual([...result.capabilitiesUsed], ["imports"]);
@@ -455,9 +455,8 @@ test("PythonParser: parseFile() stub returns valid empty RawExtraction", async (
   }
 });
 
-test("PythonParser: parseFile() stub never throws", async () => {
+test("PythonParser: parseFile() handles parse errors safely", async () => {
   const parser = new PythonParser();
-  // Call without initialize — should still not throw
   const file: ParseFileInput = {
     absolutePath: "/fake/path/app.py",
     relativePath: "app.py",
@@ -466,7 +465,9 @@ test("PythonParser: parseFile() stub never throws", async () => {
   const result = parser.parseFile(file, "invalid python {{[[[");
 
   assert.equal(result.path, "app.py");
-  assert.deepEqual([...result.parseErrors], []);
+  assert.equal(result.parseErrors.length, 1);
+  assert.equal(result.parseErrors[0].severity, "partial");
+  assert.equal(result.parseErrors[0].reason, "syntax");
 });
 
 test("PythonParser: resolveImport() stub returns external for everything", async () => {
