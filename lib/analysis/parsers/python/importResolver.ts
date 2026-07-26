@@ -197,6 +197,31 @@ function toProjectRelative(absolutePath: string, projectRoot: string): string {
 }
 
 /**
+ * Attempt to resolve a specifier by assuming its last segment(s) might be symbols
+ * rather than submodules. We walk up the dotted path and if a parent resolves to
+ * a real file, we return that file.
+ * 
+ * E.g. for `mypkg.core.my_func`, if `mypkg.core` resolves to `mypkg/core.py`,
+ * this returns `mypkg/core.py`.
+ */
+function resolveSymbolFallback(
+  specifier: string,
+  packages: ReadonlyMap<string, PythonPackageEntry>,
+  importRoot: string,
+  projectRoot: string,
+): string | null {
+  const parts = specifier.split(".");
+  for (let i = parts.length - 1; i > 0; i--) {
+    const parent = parts.slice(0, i).join(".");
+    const resolvedParent = lookupInIndex(packages, parent, importRoot, projectRoot);
+    if (resolvedParent !== null) {
+      return resolvedParent;
+    }
+  }
+  return null;
+}
+
+/**
  * Check if the first segment of a dotted specifier matches any known
  * top-level package in the index.
  *
@@ -316,6 +341,12 @@ function resolveRelative(
     return { resolved, raw: specifier };
   }
 
+  // Try symbol fallback: maybe the last part of fullPath is a symbol
+  const symbolResolved = resolveSymbolFallback(fullPath, packages, importRoot, projectRoot);
+  if (symbolResolved !== null) {
+    return { resolved: symbolResolved, raw: specifier };
+  }
+
   // Relative imports that don't resolve are unresolved-internal, never external
   return {
     resolved: null,
@@ -341,6 +372,12 @@ function resolveAbsolute(
   const resolved = lookupInIndex(packages, specifier, importRoot, projectRoot);
   if (resolved !== null) {
     return { resolved, raw: specifier };
+  }
+
+  // Try symbol fallback
+  const symbolResolved = resolveSymbolFallback(specifier, packages, importRoot, projectRoot);
+  if (symbolResolved !== null) {
+    return { resolved: symbolResolved, raw: specifier };
   }
 
   // Check if this is plausibly internal (first segment matches a known package)

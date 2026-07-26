@@ -23,8 +23,25 @@ export type ProjectFile = {
  * a project root. Also used as the fallback for discoverSourceFiles()
  * when no registry-provided set is given.
  */
-const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx"]);
-const EXCLUDED_DIRECTORIES = new Set(["node_modules", ".git", "dist", "build", ".next"]);
+const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".py"]);
+const EXCLUDED_DIRECTORIES = new Set([
+  // JavaScript / TypeScript
+  "node_modules", ".git", "dist", "build", ".next",
+  // Python — virtual environments
+  ".venv", "venv", "env",
+  // Python — caches and tool artifacts
+  "__pycache__", ".pytest_cache", ".tox", ".mypy_cache", ".ruff_cache",
+  // Python — build artifacts
+  "site-packages",
+  // Conda
+  "conda-meta",
+]);
+
+/**
+ * Directory-name suffix patterns for exclusion.
+ * These catch names like `mypackage.egg-info` that vary by project name.
+ */
+const EXCLUDED_DIRECTORY_SUFFIXES = [".egg-info"];
 export const MAX_SOURCE_FILES = 800;
 
 export class DiscoveryError extends Error {}
@@ -37,6 +54,8 @@ export async function findProjectRoot(extractionDirectory: string): Promise<stri
       entry.name === "package.json" ||
       entry.name === "tsconfig.json" ||
       entry.name === "jsconfig.json" ||
+      entry.name === "pyproject.toml" ||
+      entry.name === "setup.cfg" ||
       DEFAULT_SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()),
   );
   const directories = visibleEntries.filter((entry) => entry.isDirectory());
@@ -72,7 +91,11 @@ export async function discoverSourceFiles(
     for (const entry of entries) {
       const fullPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name.startsWith(".") || EXCLUDED_DIRECTORIES.has(entry.name)) continue;
+        if (
+          entry.name.startsWith(".") ||
+          EXCLUDED_DIRECTORIES.has(entry.name) ||
+          EXCLUDED_DIRECTORY_SUFFIXES.some((suffix) => entry.name.endsWith(suffix))
+        ) continue;
         await walk(fullPath);
         continue;
       }
@@ -89,7 +112,8 @@ export async function discoverSourceFiles(
 
   await walk(projectRoot);
   if (discovered.length === 0) {
-    throw new DiscoveryError("No .ts, .tsx, .js, or .jsx files were found in this archive.");
+    const extList = [...extensions].map((e) => e.startsWith(".") ? e : `.${e}`).sort().join(", ");
+    throw new DiscoveryError(`No source files (${extList}) were found in this archive.`);
   }
   return discovered.sort((a, b) => a.filePath.localeCompare(b.filePath));
 }

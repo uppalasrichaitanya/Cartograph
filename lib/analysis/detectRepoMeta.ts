@@ -75,17 +75,20 @@ async function detectFramework(projectRoot: string): Promise<string | null> {
 
 /**
  * Detect primary language from the analyzed source files.
- * Simply counts .ts/.tsx vs .js/.jsx among analyzed nodes.
+ * Counts .ts/.tsx vs .js/.jsx vs .py among analyzed nodes.
  */
 function detectLanguage(graph: DependencyGraph): string | null {
   let tsCount = 0;
   let jsCount = 0;
+  let pyCount = 0;
   for (const node of graph.nodes) {
     const ext = path.extname(node.path).toLowerCase();
     if (ext === ".ts" || ext === ".tsx") tsCount++;
     else if (ext === ".js" || ext === ".jsx") jsCount++;
+    else if (ext === ".py") pyCount++;
   }
-  if (tsCount === 0 && jsCount === 0) return null;
+  if (tsCount === 0 && jsCount === 0 && pyCount === 0) return null;
+  if (pyCount >= tsCount && pyCount >= jsCount) return "Python";
   return tsCount >= jsCount ? "TypeScript" : "JavaScript";
 }
 

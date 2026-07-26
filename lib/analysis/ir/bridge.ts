@@ -51,6 +51,8 @@ const MANIFEST_FILES: ReadonlyArray<{ file: string; language: LanguageId }> = [
   { file: "package.json", language: "typescript" },
   { file: "tsconfig.json", language: "typescript" },
   { file: "jsconfig.json", language: "javascript" },
+  { file: "pyproject.toml", language: "python" },
+  { file: "setup.cfg", language: "python" },
 ];
 
 /**

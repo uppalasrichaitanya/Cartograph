@@ -119,7 +119,25 @@ function extractFromImportFromStatement(node: Node): string[] {
 
   if (moduleNameNode.type === "dotted_name") {
     // Absolute import: `from foo.bar import baz`
-    return [moduleNameNode.text];
+    const specifiers: string[] = [];
+    const nameNodes = node.childrenForFieldName("name");
+    let hasNames = false;
+    for (const nameNode of nameNodes) {
+      if (!nameNode) continue;
+      hasNames = true;
+      if (nameNode.type === "dotted_name") {
+        specifiers.push(`${moduleNameNode.text}.${nameNode.text}`);
+      } else if (nameNode.type === "aliased_import") {
+        const name = nameNode.childForFieldName("name");
+        if (name) {
+          specifiers.push(`${moduleNameNode.text}.${name.text}`);
+        }
+      }
+    }
+    if (!hasNames) {
+      specifiers.push(moduleNameNode.text);
+    }
+    return specifiers;
   }
 
   if (moduleNameNode.type === "relative_import") {
@@ -164,17 +182,34 @@ function extractFromRelativeImport(relNode: Node, fromNode: Node): string[] {
   }
 
   // If there's a module path after the dots, the specifier is dots + path
-  // e.g. `from .sub import thing` → ".sub"
-  // e.g. `from ..pkg.mod import func` → "..pkg.mod"
+  // e.g. `from .sub import thing` → ".sub.thing"
+  // e.g. `from ..pkg.mod import func` → "..pkg.mod.func"
+  const nameNodes = fromNode.childrenForFieldName("name");
   if (modulePath) {
-    return [`${prefix}${modulePath}`];
+    const specifiers: string[] = [];
+    let hasNames = false;
+    for (const nameNode of nameNodes) {
+      if (!nameNode) continue;
+      hasNames = true;
+      if (nameNode.type === "dotted_name") {
+        specifiers.push(`${prefix}${modulePath}.${nameNode.text}`);
+      } else if (nameNode.type === "aliased_import") {
+        const name = nameNode.childForFieldName("name");
+        if (name) {
+          specifiers.push(`${prefix}${modulePath}.${name.text}`);
+        }
+      }
+    }
+    if (!hasNames) {
+      specifiers.push(`${prefix}${modulePath}`);
+    }
+    return specifiers;
   }
 
   // Bare relative import: `from . import foo, bar`
   // Each imported name becomes its own specifier
   // e.g. `from . import foo` → ".foo"
   // e.g. `from .. import a, b` → "..a", "..b"
-  const nameNodes = fromNode.childrenForFieldName("name");
   const specifiers: string[] = [];
   for (const nameNode of nameNodes) {
     if (!nameNode) continue;

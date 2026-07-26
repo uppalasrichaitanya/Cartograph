@@ -11,6 +11,7 @@ import { extractAll, toLegacyResult } from "./extractAll";
 import { prepareRenderData } from "./prepareRenderData";
 import { ParserRegistry } from "./parsers/registry";
 import { TypeScriptParser } from "./parsers/typescript/parser";
+import { PythonParser } from "./parsers/python/parser";
 import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
 import { deleteUpload, saveAnalysis } from "@/lib/storage/local";
@@ -62,6 +63,7 @@ export async function analyzeRepository(
     // registry-driven extensions for file discovery.
     const registry = new ParserRegistry();
     registry.register(new TypeScriptParser());
+    registry.register(new PythonParser());
 
     const legacyDiscovered = await discoverSourceFiles(
       projectRoot,

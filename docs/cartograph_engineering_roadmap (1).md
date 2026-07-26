@@ -138,6 +138,8 @@ the module-root model handles multi-root Python projects; TS pipeline has zero r
 > now, while only two parsers exist, not after a third and fourth are built on the same
 > assumption.
 
+*Historical Note: During implementation, Phase 5 (Pipeline Integration) and Phase 6 (Python Conformance Implementation) of this milestone were naturally executed and completed together to ensure correct behavior in the full framework.*
+
 ---
 
 ## Milestone 4 — Analyzer Plugin Framework
