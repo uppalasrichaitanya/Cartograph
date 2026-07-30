@@ -214,7 +214,6 @@ export class WorkerPool {
    */
   private executeTask(worker: Worker, task: QueuedTask): void {
     let settled = false;
-    let timeoutHandle: ReturnType<typeof setTimeout>;
 
     const settle = (result: WorkerTaskResult<unknown>) => {
       if (settled) return;
@@ -229,7 +228,7 @@ export class WorkerPool {
     // Set up the timeout — this is the actual enforcement mechanism.
     // On timeout, worker.terminate() is called — a real, OS-enforced
     // termination (spec Section 5).
-    timeoutHandle = setTimeout(() => {
+    const timeoutHandle = setTimeout(() => {
       if (!settled) {
         // Terminate the worker — this is the key correctness property.
         // Unlike Promise.race, this actually stops the CPU-bound work.

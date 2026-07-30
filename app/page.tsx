@@ -1,13 +1,14 @@
 import { UploadForm } from "@/components/UploadForm";
+import Link from "next/link";
 
 export default function HomePage() {
   return (
     <main className="landing-shell">
       <header className="site-header">
-        <a className="brand" href="/" aria-label="Cartograph home">
+        <Link className="brand" href="/" aria-label="Cartograph home">
           <span className="brand-mark" aria-hidden="true">⌘</span>
           Cartograph
-        </a>
+        </Link>
         <span className="header-note">Static analysis only</span>
       </header>
 
@@ -15,7 +16,7 @@ export default function HomePage() {
         <p className="eyebrow">CODEBASE CARTOGRAPHY</p>
         <h1>See how your code is really connected.</h1>
         <p className="hero-copy">
-          Upload a JavaScript or TypeScript project and get a clickable dependency map built from its real imports — no guessed edges.
+          Upload a JavaScript, TypeScript, or Python project and get a clickable dependency map built from its real imports — no guessed edges.
         </p>
         <UploadForm />
         <p className="privacy-note">Zip files go directly to Vercel Blob. Archives are removed from the analysis worker when processing ends.</p>
@@ -25,7 +26,7 @@ export default function HomePage() {
         <article>
           <span>01</span>
           <h2>Real imports</h2>
-          <p>TypeScript’s compiler API reads imports and re-exports, including configured path aliases.</p>
+          <p>Static analysis reads imports and re-exports from TypeScript, JavaScript, and Python — including configured path aliases.</p>
         </article>
         <article>
           <span>02</span>

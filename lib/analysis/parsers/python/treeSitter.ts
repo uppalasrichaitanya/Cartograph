@@ -32,7 +32,7 @@
  */
 
 import path from "node:path";
-import { createRequire } from "node:module";
+import { readFile } from "node:fs/promises";
 import { Parser, Language, type Node, type Tree } from "web-tree-sitter";
 
 // Re-export types that the import extractor needs
@@ -56,27 +56,36 @@ let initPromise: Promise<void> | null = null;
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the path to a WASM file.
+ * Resolve the directory of a dependency package at runtime.
  *
- * Uses `createRequire` from `node:module` to get an ESM-compatible
- * `require.resolve`, then navigates to the expected WASM file location.
- * This works regardless of hoisting, monorepo setups, or pnpm layouts.
+ * Why not a plain `createRequire(import.meta.url)` at module scope:
+ *   Webpack statically recognizes `createRequire` imported from `node:module`
+ *   and rewrites any `.resolve()` call on its result into an internal webpack
+ *   module id. In the Next.js server build that produced either the string
+ *   "web-tree-sitter?1b29" (dirname → "." → a bare relative wasm path resolved
+ *   against process.cwd(), i.e. ENOENT) or the number 9711 (a TypeError from
+ *   path.dirname). Both are module ids, never filesystem paths.
+ *
+ *   `process.getBuiltinModule` is a plain property access on `process`, so
+ *   there is no import specifier for webpack to see and nothing to rewrite.
+ *   It returns the real `node:module`, giving a `require.resolve` that
+ *   performs genuine Node resolution against real node_modules on disk.
+ *   Requires Node >= 22.3 (this app already requires the Node runtime).
+ *
+ * The base is cwd-anchored rather than derived from the compiled bundle's
+ * location, because the bundle lives under .next/server/** while the
+ * dependencies live in the project's node_modules.
  */
-function resolveWasmPath(packageName: string, relativePath: string): string {
-  const esmRequire = createRequire(import.meta.url);
-  try {
-    // Attempt to resolve package.json directly (works for packages without 'exports' restrictions)
-    const packageJsonPath = esmRequire.resolve(`${packageName}/package.json`);
-    return path.join(path.dirname(packageJsonPath), relativePath);
-  } catch (err: any) {
-    if (err.code === "ERR_PACKAGE_PATH_NOT_EXPORTED") {
-      // Fallback: resolve the main package entry point and use its directory.
-      // This assumes the main entry point is at the package root (true for web-tree-sitter).
-      const mainPath = esmRequire.resolve(packageName);
-      return path.join(path.dirname(mainPath), relativePath);
-    }
-    throw err;
-  }
+function resolvePackageDirectory(packageEntry: string): string {
+  const nodeModule = process.getBuiltinModule("module") as typeof import("node:module");
+  const runtimeRequire = nodeModule.createRequire(path.join(process.cwd(), "noop.js"));
+  return path.dirname(runtimeRequire.resolve(packageEntry));
+}
+
+function getTreeSitterWasmsPath(): string {
+  // tree-sitter-wasms has a broken "main" field ("bindings/node", which is not
+  // published), but it has no exports map, so package.json resolves fine.
+  return resolvePackageDirectory("tree-sitter-wasms/package.json");
 }
 
 // ---------------------------------------------------------------------------
@@ -103,16 +112,20 @@ export async function ensureInitialized(): Promise<void> {
 
   initPromise = (async () => {
     try {
-      // Load the core WASM runtime
-      const runtimeWasm = resolveWasmPath("web-tree-sitter", "tree-sitter.wasm");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- EmscriptenModule type is not
-      // declared in web-tree-sitter 0.25.x without @types/emscripten installed.
-      // locateFile is a valid Emscripten config option that helps find the .wasm file.
-      await Parser.init({ locateFile: () => runtimeWasm } as any);
+      // Load the core WASM runtime.
+      // No `locateFile` override: web-tree-sitter is listed in
+      // serverExternalPackages, so it is required as a real package at runtime
+      // and its Emscripten glue sets scriptDirectory from its own __dirname,
+      // finding the co-located tree-sitter.wasm on its own. Supplying a
+      // locateFile computed here is what previously produced a bad path.
+      await Parser.init();
 
-      // Load the Python grammar
-      const pythonWasm = resolveWasmPath("tree-sitter-wasms", "out/tree-sitter-python.wasm");
-      const pythonLang = await Language.load(pythonWasm);
+      // Load the Python grammar from bytes rather than a path.
+      // Language.load(string) internally calls require("fs/promises"), which
+      // throws "Dynamic require of \"fs/promises\" is not supported" when the
+      // ESM build is used. Passing a Uint8Array skips that branch entirely.
+      const pythonWasm = path.join(getTreeSitterWasmsPath(), "out", "tree-sitter-python.wasm");
+      const pythonLang = await Language.load(new Uint8Array(await readFile(pythonWasm)));
 
       // Create and configure the parser
       const parser = new Parser();

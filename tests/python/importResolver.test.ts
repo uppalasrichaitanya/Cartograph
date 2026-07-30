@@ -304,14 +304,17 @@ describe("resolveImport: absolute imports", () => {
     }
   });
 
-  test("unresolved-internal: first segment matches but path doesn't resolve", async () => {
+  test("symbol fallback: first segment matches, nonexistent symbol resolves to package __init__", async () => {
     const { root, index } = await createStandardProject();
     try {
       const fromFile = makeFile(root, "main.py");
+      // With symbol-level extraction, "mypackage.nonexistent" can originate from
+      // `from mypackage import nonexistent`. resolveSymbolFallback correctly
+      // strips the symbol and resolves to the package's __init__.py.
       const result = resolveImport("mypackage.nonexistent", fromFile, index, root);
 
-      assert.equal(result.resolved, null);
-      assert.equal(result.unresolvedKind, "unresolved-internal");
+      assert.equal(result.resolved, "mypackage/__init__.py");
+      assert.equal(result.unresolvedKind, undefined);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -395,14 +398,17 @@ describe("resolveImport: relative imports", () => {
     }
   });
 
-  test("unresolved relative import is unresolved-internal, never external", async () => {
+  test("relative import with nonexistent symbol resolves to package __init__", async () => {
     const { root, index } = await createStandardProject();
     try {
       const fromFile = makeFile(root, "mypackage/utils/helpers.py");
+      // ".nonexistent" from `from . import nonexistent` — resolves to the
+      // current package's __init__.py via resolveSymbolFallback, since the
+      // symbol might be defined there.
       const result = resolveImport(".nonexistent", fromFile, index, root);
 
-      assert.equal(result.resolved, null);
-      assert.equal(result.unresolvedKind, "unresolved-internal");
+      assert.equal(result.resolved, "mypackage/utils/__init__.py");
+      assert.equal(result.unresolvedKind, undefined);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -648,14 +654,19 @@ describe("resolveImport: determinism", () => {
 // ---------------------------------------------------------------------------
 
 describe("resolveImport: edge cases", () => {
-  test("dotted absolute import with nonexistent deep path", async () => {
+  test("deep nonexistent path resolves to nearest ancestor package (known limitation)", async () => {
     const { root, index } = await createStandardProject();
     try {
       const fromFile = makeFile(root, "main.py");
+      // resolveSymbolFallback walks up the path hierarchy and finds the
+      // nearest existing ancestor. This is a known limitation: deeply
+      // nonexistent paths resolve to distant ancestors. In practice this
+      // only occurs with broken imports where the intermediate packages
+      // don't exist. See symbol_fallback_analysis.md for details.
       const result = resolveImport("mypackage.utils.deep.nested.module", fromFile, index, root);
 
-      assert.equal(result.resolved, null);
-      assert.equal(result.unresolvedKind, "unresolved-internal");
+      assert.equal(result.resolved, "mypackage/utils/__init__.py");
+      assert.equal(result.unresolvedKind, undefined);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

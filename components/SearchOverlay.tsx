@@ -99,7 +99,7 @@ export function SearchOverlay({
         </div>
         <div className="search-results" ref={listRef} role="listbox" aria-label="Search results">
           {filtered.length === 0 && (
-            <div className="search-empty">No files match "{query}"</div>
+            <div className="search-empty">No files match &ldquo;{query}&rdquo;</div>
           )}
           {filtered.map((item, i) => (
             <button

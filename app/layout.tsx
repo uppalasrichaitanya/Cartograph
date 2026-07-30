@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Cartograph — Codebase architecture, verified",
-  description: "Generate an interactive architecture diagram from a JavaScript or TypeScript repository.",
+  description: "Generate an interactive architecture diagram from a JavaScript, TypeScript, or Python repository.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

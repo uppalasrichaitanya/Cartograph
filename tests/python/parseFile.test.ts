@@ -1,10 +1,21 @@
 /**
- * Python Parser — Phase 3 Unit Tests (Tree-sitter Integration & Parsing)
+ * Python Parser — Unit Tests (Tree-sitter Integration & Parsing)
  *
  * Tests the parseFile() implementation using tree-sitter-python WASM.
  * Covers import extraction for all Python import forms, syntax error
  * handling, deduplication, determinism, empty/comment-only files, and
  * edge cases.
+ *
+ * Extraction semantics (Phase 5/6):
+ *   - `import X`         → specifier "X"
+ *   - `from X import Y`  → specifier "X.Y" (symbol-level path)
+ *   - `from X import *`  → specifier "X" (no symbol to append)
+ *   - `from . import Y`  → specifier ".Y" (bare relative)
+ *   - `from .X import Y` → specifier ".X.Y" (relative + symbol)
+ *
+ * Symbol-level extraction enables resolveSymbolFallback() to properly
+ * map symbol imports to their parent module files during Phase 4
+ * resolution.
  *
  * These tests exercise the parser through the LanguageParser interface
  * contract. The tree-sitter WASM runtime is loaded once before all tests
@@ -110,36 +121,40 @@ test("parseFile: from-import (from foo import bar)", () => {
   const file = makeFile(testRoot, "app.py");
   const result = parser.parseFile(file, "from foo import bar\n");
 
-  assert.deepEqual([...result.internalImports], ["foo"]);
+  // Symbol-level: "from foo import bar" → "foo.bar"
+  assert.deepEqual([...result.internalImports], ["foo.bar"]);
 });
 
 test("parseFile: from-import multi (from foo import a, b, c)", () => {
   const file = makeFile(testRoot, "app.py");
   const result = parser.parseFile(file, "from foo import a, b, c\n");
 
-  // All three imports are from the same module "foo" — one specifier
-  assert.deepEqual([...result.internalImports], ["foo"]);
+  // Symbol-level: each imported name creates a separate specifier
+  assert.deepEqual([...result.internalImports], ["foo.a", "foo.b", "foo.c"]);
 });
 
 test("parseFile: from-import parenthesized (from foo import (a, b, c))", () => {
   const file = makeFile(testRoot, "app.py");
   const result = parser.parseFile(file, "from foo import (a, b, c)\n");
 
-  assert.deepEqual([...result.internalImports], ["foo"]);
+  // Parenthesized form is semantically identical to comma-separated
+  assert.deepEqual([...result.internalImports], ["foo.a", "foo.b", "foo.c"]);
 });
 
 test("parseFile: from-import dotted module (from foo.bar import baz)", () => {
   const file = makeFile(testRoot, "app.py");
   const result = parser.parseFile(file, "from foo.bar import baz\n");
 
-  assert.deepEqual([...result.internalImports], ["foo.bar"]);
+  // Symbol-level: "from foo.bar import baz" → "foo.bar.baz"
+  assert.deepEqual([...result.internalImports], ["foo.bar.baz"]);
 });
 
 test("parseFile: from-import aliased (from foo import bar as baz)", () => {
   const file = makeFile(testRoot, "app.py");
   const result = parser.parseFile(file, "from foo import bar as baz\n");
 
-  assert.deepEqual([...result.internalImports], ["foo"]);
+  // Alias is ignored; specifier uses the original name
+  assert.deepEqual([...result.internalImports], ["foo.bar"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -183,14 +198,16 @@ test("parseFile: relative import with module path (from .sub import thing)", () 
   const file = makeFile(testRoot, "pkg/mod.py");
   const result = parser.parseFile(file, "from .sub import thing\n");
 
-  assert.deepEqual([...result.internalImports], [".sub"]);
+  // Symbol-level: ".sub.thing"
+  assert.deepEqual([...result.internalImports], [".sub.thing"]);
 });
 
 test("parseFile: relative import — double dot with module path (from ..pkg.mod import func)", () => {
   const file = makeFile(testRoot, "a/b/mod.py");
   const result = parser.parseFile(file, "from ..pkg.mod import func\n");
 
-  assert.deepEqual([...result.internalImports], ["..pkg.mod"]);
+  // Symbol-level: "..pkg.mod.func"
+  assert.deepEqual([...result.internalImports], ["..pkg.mod.func"]);
 });
 
 test("parseFile: relative import — multiple names (from . import a, b, c)", () => {
@@ -224,9 +241,9 @@ from sys import argv
 `;
   const result = parser.parseFile(file, code);
 
-  // "os" appears twice as `import os`, once as `from os import path`.
-  // All three refer to module "os" — deduplicated to one.
-  assert.deepEqual([...result.internalImports], ["os", "sys"]);
+  // "os" (x2 import os, deduplicated), "sys" (import sys),
+  // "os.path" (from os import path), "sys.argv" (from sys import argv)
+  assert.deepEqual([...result.internalImports], ["os", "sys", "os.path", "sys.argv"]);
 });
 
 test("parseFile: different dotted paths are not deduplicated", () => {
@@ -239,9 +256,9 @@ from foo.bar import x
 `;
   const result = parser.parseFile(file, code);
 
-  // "foo", "foo.bar", "foo.bar.baz" are three different modules
-  // "from foo.bar import x" deduplicates with "import foo.bar"
-  assert.deepEqual([...result.internalImports], ["foo", "foo.bar", "foo.bar.baz"]);
+  // "foo", "foo.bar", "foo.bar.baz" are three different import statements.
+  // "from foo.bar import x" → "foo.bar.x" (distinct from "foo.bar")
+  assert.deepEqual([...result.internalImports], ["foo", "foo.bar", "foo.bar.baz", "foo.bar.x"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -298,7 +315,9 @@ from . import utils
 `;
   const result = parser.parseFile(file, code);
 
-  assert.deepEqual([...result.internalImports], ["os", "sys", "pathlib", ".utils"]);
+  // "from pathlib import Path" → "pathlib.Path" (symbol-level)
+  // "from . import utils" → ".utils" (bare relative)
+  assert.deepEqual([...result.internalImports], ["os", "sys", "pathlib.Path", ".utils"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -354,7 +373,8 @@ class MyClass:
   const imports = [...result.internalImports];
   assert.ok(imports.includes("top_level"));
   assert.ok(imports.includes("inside_function"));
-  assert.ok(imports.includes("os"));
+  // "from os import path" → "os.path" (symbol-level)
+  assert.ok(imports.includes("os.path"));
   assert.ok(imports.includes("inside_class"));
 });
 
@@ -377,7 +397,8 @@ if True:
   assert.ok(imports.includes("always"));
   assert.ok(imports.includes("optional_dep"));
   assert.ok(imports.includes("fallback_dep"));
-  assert.ok(imports.includes("conditional"));
+  // "from conditional import thing" → "conditional.thing" (symbol-level)
+  assert.ok(imports.includes("conditional.thing"));
 });
 
 // ---------------------------------------------------------------------------
@@ -413,11 +434,12 @@ from x_pkg import thing
   const result = parser.parseFile(file, code);
 
   // Source order, NOT alphabetical
+  // "from x_pkg import thing" → "x_pkg.thing" (symbol-level)
   assert.deepEqual([...result.internalImports], [
     "z_module",
     "a_module",
     "m_module",
-    "x_pkg",
+    "x_pkg.thing",
   ]);
 });
 
@@ -472,20 +494,28 @@ from ..utils.logging import get_logger
   const result = parser.parseFile(file, code);
 
   const imports = [...result.internalImports];
+  // Symbol-level extraction: "from X import Y" → "X.Y"
+  // Exception: __future__ is a special AST node (future_import_statement)
+  // that the extractor handles separately, emitting just "__future__".
   assert.deepEqual(imports, [
     "__future__",
     "os",
     "sys",
     "json",
-    "pathlib",
-    "typing",
-    "collections.abc",
-    "flask",
-    "sqlalchemy",
-    "sqlalchemy.orm",
+    "pathlib.Path",
+    "typing.Optional",
+    "typing.Dict",
+    "typing.List",
+    "collections.abc.Sequence",
+    "flask.Flask",
+    "flask.request",
+    "flask.jsonify",
+    "sqlalchemy.create_engine",
+    "sqlalchemy.orm.Session",
     ".config",
-    ".models",
-    "..utils.logging",
+    ".models.User",
+    ".models.Post",
+    "..utils.logging.get_logger",
   ]);
   assert.deepEqual([...result.parseErrors], []);
 });

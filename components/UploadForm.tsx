@@ -80,7 +80,7 @@ export function UploadForm() {
     const file = input.current?.files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".zip")) {
-      setError("Choose a .zip archive of a JavaScript or TypeScript project.");
+      setError("Choose a .zip archive of a JavaScript, TypeScript, or Python project.");
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
@@ -166,7 +166,7 @@ export function UploadForm() {
           />
           <span className="file-icon" aria-hidden="true">{selectedFileName ? "📁" : "↑"}</span>
           <span>{selectedFileName ?? "Drop a project zip here, or choose a file"}</span>
-          <small>JavaScript &amp; TypeScript · 25 MB max</small>
+          <small>JavaScript, TypeScript &amp; Python · 25 MB max</small>
         </label>
 
         {/* Buttons row: Submit + Cancel (Issue 29) */}
@@ -198,9 +198,9 @@ export function UploadForm() {
               <summary>Troubleshooting</summary>
               <ul>
                 <li>The file must be a <strong>.zip</strong> archive</li>
-                <li>It should contain JavaScript (.js/.jsx) or TypeScript (.ts/.tsx) source files</li>
+                <li>It should contain JavaScript (.js/.jsx), TypeScript (.ts/.tsx), or Python (.py) source files</li>
                 <li>Maximum file size is 25 MB</li>
-                <li>Ensure the zip doesn't contain only <code>node_modules</code> or <code>dist</code> folders</li>
+                <li>Ensure the zip doesn&apos;t contain only <code>node_modules</code> or <code>dist</code> folders</li>
                 <li>Try zipping the project root directory directly</li>
               </ul>
             </details>

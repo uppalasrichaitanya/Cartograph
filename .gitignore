@@ -1,7 +1,19 @@
 node_modules
 .next
+out
 .env*
 !.env.example
 coverage
 *.tsbuildinfo
 .data
+
+# Local analysis fixtures / scratch upload dirs (not part of the test suite)
+test_repo
+test_repo.zip
+test_upload
+test_upload.zip
+test_repo_dummy
+test_repo_dummy.zip
+
+# Playwright MCP scratch output
+.playwright-mcp

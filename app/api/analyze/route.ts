@@ -9,11 +9,18 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  let body: { zipPath?: unknown };
   try {
-    const body = (await request.json()) as { zipPath?: unknown };
-    if (typeof body.zipPath !== "string") {
-      return NextResponse.json({ error: "zipPath is required." }, { status: 400 });
-    }
+    body = (await request.json()) as { zipPath?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON in request body." }, { status: 400 });
+  }
+
+  if (typeof body.zipPath !== "string") {
+    return NextResponse.json({ error: "zipPath is required." }, { status: 400 });
+  }
+
+  try {
     const result = await analyzeRepository(body.zipPath);
     return NextResponse.json(result);
   } catch (error) {

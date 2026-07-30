@@ -222,11 +222,8 @@ test("TypeScriptParser — parseFile error handling", async (t) => {
 // ---------------------------------------------------------------------------
 
 test("TypeScriptParser — resolveImport", async (t) => {
-  let root: string;
+  const root = await mkdtemp(path.join(tmpdir(), "cartograph-ts-parser-test-"));
   const parser = new TypeScriptParser();
-
-  // Set up a real project on disk for resolution tests
-  root = await mkdtemp(path.join(tmpdir(), "cartograph-ts-parser-test-"));
 
   try {
     // Create project structure
