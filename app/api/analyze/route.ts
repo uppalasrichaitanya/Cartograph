@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { analyzeRepository } from "@/lib/analysis/analyzeRepository";
-import { StorageError } from "@/lib/storage/local";
+import { StorageError } from "@/lib/storage";
 import { DiscoveryError } from "@/lib/analysis/discoverFiles";
 import { UnsafeZipError } from "@/lib/safety/safeUnzip";
 

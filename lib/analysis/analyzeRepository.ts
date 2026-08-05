@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -14,7 +14,7 @@ import { TypeScriptParser } from "./parsers/typescript/parser";
 import { PythonParser } from "./parsers/python/parser";
 import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
-import { deleteUpload, saveAnalysis } from "@/lib/storage/local";
+import { getStorage } from "@/lib/storage";
 import { buildRepositoryIR } from "./ir/bridge";
 import type { RootConfidence } from "./ir/types";
 import type { AnalysisResult } from "@/types/graph";
@@ -38,6 +38,8 @@ export async function analyzeRepository(
     typeof optionsOrPath === "string" ? { zipPath: optionsOrPath } : optionsOrPath;
   const { zipPath, repoName = "Untitled Repository", repoSizeBytes = null } = options;
 
+  const storage = getStorage();
+
   await report("validating", "Checking the uploaded archive");
 
   // --- Phase 6 integration: Safety Event Log ---
@@ -48,6 +50,18 @@ export async function analyzeRepository(
 
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "cartograph-"));
   try {
+    // If zipPath is a remote URL (Vercel Blob), download it to a local
+    // temp file first. The rest of the pipeline operates on local paths.
+    let localZipPath = zipPath;
+    if (zipPath.startsWith("http://") || zipPath.startsWith("https://")) {
+      await report("validating", "Downloading the archive from storage");
+      const response = await fetch(zipPath);
+      if (!response.ok) throw new AnalysisError("Failed to download the uploaded archive.");
+      const buffer = Buffer.from(await response.arrayBuffer());
+      localZipPath = path.join(temporaryDirectory, "upload.zip");
+      await writeFile(localZipPath, buffer);
+    }
+
     const extractionDirectory = path.join(temporaryDirectory, "repository");
     await report("unzipping", "Safely extracting the archive");
 
@@ -55,7 +69,7 @@ export async function analyzeRepository(
     // safeUnzip now returns an ExtractionResult with per-entry details.
     // The event log captures path rejections, symlink rejections, and
     // content-unreadable events during extraction.
-    const extractionResult = await safeUnzip(zipPath, extractionDirectory, undefined, eventLog);
+    const extractionResult = await safeUnzip(localZipPath, extractionDirectory, undefined, eventLog);
 
     const projectRoot = await findProjectRoot(extractionDirectory);
 
@@ -162,11 +176,11 @@ export async function analyzeRepository(
       ...(repositoryIR ? { repositoryIR } : {}),
     };
     await report("persisting", "Saving the shareable diagram");
-    await saveAnalysis(result);
+    await storage.saveAnalysis(result);
     return result;
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
-    // Clean up the uploaded zip file.
-    await deleteUpload(zipPath);
+    // Clean up the uploaded zip/blob.
+    await storage.deleteUpload(zipPath);
   }
 }

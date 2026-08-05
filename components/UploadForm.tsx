@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
+import { upload } from "@vercel/blob/client";
 import { ProgressStream, type ProgressState } from "./ProgressStream";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 
@@ -50,7 +51,7 @@ async function consumeAnalysisStream(
   throw new Error("The analysis stream ended before a result was returned.");
 }
 
-export function UploadForm() {
+export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [progress, setProgress] = useState<ProgressState | null>(null);
@@ -97,18 +98,31 @@ export function UploadForm() {
     try {
       setProgress({ phase: "validating", detail: "Uploading the archive to the server" });
 
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadResponse = await fetch("/api/upload-local", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-      if (!uploadResponse.ok) {
-        const body = (await uploadResponse.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? "Upload failed.");
+      let zipRef: string;
+
+      if (useBlob) {
+        // --- Vercel Blob: client-side upload directly to Blob storage ---
+        const blob = await upload(file.name, file, {
+          access: "public",
+          handleUploadUrl: "/api/upload-url",
+        });
+        zipRef = blob.url;
+      } else {
+        // --- Local: upload through the local API route ---
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadResponse = await fetch("/api/upload-local", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+        if (!uploadResponse.ok) {
+          const body = (await uploadResponse.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(body?.error ?? "Upload failed.");
+        }
+        const { tempPath } = (await uploadResponse.json()) as { tempPath: string };
+        zipRef = tempPath;
       }
-      const { tempPath } = (await uploadResponse.json()) as { tempPath: string };
 
       // Show skeleton once analysis begins.
       setShowSkeleton(true);
@@ -117,7 +131,7 @@ export function UploadForm() {
       const repoName = file.name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim() || "Untitled Repository";
       const repoSizeBytes = file.size;
 
-      const shareUrl = await consumeAnalysisStream(tempPath, repoName, repoSizeBytes, setProgress, controller.signal);
+      const shareUrl = await consumeAnalysisStream(zipRef, repoName, repoSizeBytes, setProgress, controller.signal);
       window.location.assign(shareUrl);
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") {

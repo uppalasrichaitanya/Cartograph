@@ -2,6 +2,7 @@ import { UploadForm } from "@/components/UploadForm";
 import { SpecimenPlate } from "@/components/SpecimenPlate";
 import Link from "next/link";
 import { MarkIcon } from "@/components/Icons";
+import { isUsingBlobStorage } from "@/lib/storage";
 
 export default function HomePage() {
   return (
@@ -32,7 +33,7 @@ export default function HomePage() {
           Nothing is inferred from folder names, and anything that could not be
           resolved is drawn as unresolved rather than quietly dropped.
         </p>
-        <UploadForm />
+        <UploadForm useBlob={isUsingBlobStorage()} />
         <p className="privacy-note">
           Archives are removed from the analysis worker when processing ends.
         </p>
