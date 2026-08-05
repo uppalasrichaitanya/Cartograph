@@ -102,7 +102,8 @@ test("Integration — buildRepositoryIR produces valid IR from pipeline data", a
     // Check external dependency node
     const reactNode = extNodes.find((n) => n.name === "react");
     assert.ok(reactNode, "React external dependency node should exist");
-    assert.equal(reactNode.provenance.origin, "heuristic");
+    // Observed in source → verified. See buildExternalDependencyNode.
+    assert.equal(reactNode.provenance.origin, "verified");
 
     // --- Edges ---
     const containmentEdges = typedIR.edges.filter(

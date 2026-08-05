@@ -179,6 +179,17 @@ export function buildFileLookupMap(
  *   3. Alias specifiers — match against tsconfig path aliases
  *   4. If nothing matches → external import (resolved: null)
  *
+ * Classification of failures (`unresolvedKind`):
+ *   A specifier starting with '.' or '/' is syntactically incapable of naming
+ *   an npm package, so a failed lookup means "internal reference whose target
+ *   is unknown" — reported as 'unresolved-internal'. Every other failed
+ *   specifier is reported as 'external'.
+ *
+ *   Alias-shaped specifiers are deliberately NOT reclassified: a tsconfig
+ *   `paths` entry may legitimately point into node_modules, so a failed alias
+ *   lookup is not evidence of an internal target. This distinction is read
+ *   directly off the specifier's syntax — nothing is inferred or guessed.
+ *
  * @param specifier - Raw import specifier as written in source code
  * @param fromFile - The file containing the import
  * @param config - Alias configuration from tsconfig/jsconfig
@@ -199,7 +210,14 @@ export function resolveSpecifier(
       ? path.resolve(projectRoot, `.${specifier}`)
       : path.resolve(path.dirname(fromFile.absolutePath), specifier);
     const resolved = lookupCandidate(base, knownFilesMap);
-    return { resolved: resolved ?? null, raw: specifier };
+    if (resolved) return { resolved, raw: specifier };
+    // Syntactically internal but no such file — a broken internal reference,
+    // not a third-party package.
+    return {
+      resolved: null,
+      raw: specifier,
+      unresolvedKind: "unresolved-internal",
+    };
   }
 
   // Alias specifiers — match against tsconfig paths
@@ -217,5 +235,5 @@ export function resolveSpecifier(
   }
 
   // No match — external import
-  return { resolved: null, raw: specifier };
+  return { resolved: null, raw: specifier, unresolvedKind: "external" };
 }

@@ -110,9 +110,9 @@ export interface ResolvedSpecifier {
   /**
    * Classification of unresolved imports (only meaningful when resolved is null).
    *
-   * - 'external': the import is external (stdlib, third-party). Default
-   *   when omitted — the TypeScript parser never sets this field, so all
-   *   its failed resolutions continue to be classified as external.
+   * - 'external': the import is external (stdlib, third-party). Also the
+   *   assumed default when the field is omitted, so a parser that does not
+   *   classify its failures keeps its previous behavior.
    * - 'unresolved-internal': the import is syntactically incapable of being
    *   external (relative imports, or absolute imports whose first segment
    *   matches a known project package), but the full path does not resolve
@@ -121,6 +121,39 @@ export interface ResolvedSpecifier {
    *
    * Added in Milestone 3 (§4.1) for Python's three-outcome resolution.
    * Pre-approved additive change — backward-compatible with all existing parsers.
+   *
+   * Set by both the Python and TypeScript parsers. TypeScript gained it in
+   * Phase 0.5 so that a repository does not present different confidence
+   * semantics purely because of the language it is written in; before that,
+   * only Python repositories could produce the Unknown state.
+   *
+   * ---
+   * DEVELOPER NOTE — Unknown-state frequency is not comparable across languages.
+   *
+   * Both parsers classify their failures, so confidence *semantics* are aligned:
+   * 'unresolved-internal' means the same thing in either language, and a fact
+   * labelled Unknown is equally trustworthy whichever parser produced it.
+   *
+   * The *rate* at which Unknown appears is not comparable, because the two
+   * languages disagree — legitimately — about which specifiers are even
+   * eligible for that classification:
+   *
+   *   - TypeScript: only specifiers starting with '.' or '/' can be
+   *     'unresolved-internal'. Alias-shaped specifiers are deliberately left
+   *     'external', because a tsconfig `paths` entry may legitimately resolve
+   *     into node_modules, so a failed alias lookup is not evidence of an
+   *     internal target.
+   *   - Python: internality is decided by the detected import root and the
+   *     package index, so a dotted specifier whose first segment names a known
+   *     project package is eligible even though it looks nothing like a
+   *     relative path.
+   *
+   * Consequence: a Python repository and a TypeScript repository of comparable
+   * health can show materially different Unknown counts. That difference
+   * measures each language's resolution semantics, not the quality of the code
+   * or the thoroughness of the analysis. Do not treat Unknown frequency as a
+   * cross-language metric, and do not "normalize" the two classifications to
+   * make the numbers converge — the asymmetry is truthful.
    */
   readonly unresolvedKind?: "external" | "unresolved-internal";
 }

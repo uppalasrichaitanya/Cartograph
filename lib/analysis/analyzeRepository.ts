@@ -16,6 +16,7 @@ import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
 import { deleteUpload, saveAnalysis } from "@/lib/storage/local";
 import { buildRepositoryIR } from "./ir/bridge";
+import type { RootConfidence } from "./ir/types";
 import type { AnalysisResult } from "@/types/graph";
 
 export type ProgressPhase = "validating" | "unzipping" | "parsing" | "clustering" | "detecting" | "layout" | "persisting";
@@ -62,8 +63,9 @@ export async function analyzeRepository(
     // Create a per-run registry. Register language parsers, then use
     // registry-driven extensions for file discovery.
     const registry = new ParserRegistry();
+    const pythonParser = new PythonParser();
     registry.register(new TypeScriptParser());
-    registry.register(new PythonParser());
+    registry.register(pythonParser);
 
     const legacyDiscovered = await discoverSourceFiles(
       projectRoot,
@@ -78,8 +80,14 @@ export async function analyzeRepository(
 
     await registry.initializeAll({ projectRoot, discoveredFiles });
     let parserExtractionResult;
+    // The Python parser detects its own import root and reports whether that
+    // came from a declared layout (pyproject.toml / setup.cfg) or a structural
+    // guess. Captured here because disposeAll() clears it, and preserved into
+    // the IR so a guessed root is not later mistaken for a declared one.
+    let pythonRootConfidence: RootConfidence | undefined;
     try {
       parserExtractionResult = await extractAll(projectRoot, discoveredFiles, registry);
+      pythonRootConfidence = pythonParser.rootConfidence ?? undefined;
     } finally {
       registry.disposeAll();
     }
@@ -105,16 +113,38 @@ export async function analyzeRepository(
     const clusters = clusterByFolder(graph);
     await report("detecting", "Detecting cycles, dependency hubs, and orphans");
     const anomalies = detectAnomalies(graph);
-    await report("layout", "Computing a readable diagram layout");
-    const renderData = await prepareRenderData(graph, clusters, anomalies);
-
-    const repoMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
 
     // --- Milestone 2 integration: build RepositoryIR from RawExtraction[] ---
     // The IR is built directly from the extraction pipeline's RawExtraction[],
     // preserving real IRParseError data (line, column, severity, reason).
     // On failure, it returns null and the legacy pipeline continues unaffected.
-    const repositoryIR = buildRepositoryIR(projectRoot, parserExtractionResult.extractions);
+    //
+    // Built BEFORE layout because render data is now stamped with the
+    // per-file confidence the IR carries.
+    //
+    // The Python parser's root confidence is applied only when the repository
+    // actually contains Python. Its detection runs unconditionally, so for a
+    // TypeScript-only project it would report a structural guess about a
+    // Python root that does not exist — which must not weaken confidence in a
+    // root that package.json genuinely declared.
+    const hasPythonFiles = discoveredFiles.some((file) =>
+      file.relativePath.endsWith(".py"),
+    );
+    const repositoryIR = buildRepositoryIR(
+      projectRoot,
+      parserExtractionResult.extractions,
+      hasPythonFiles ? pythonRootConfidence : undefined,
+    );
+
+    await report("layout", "Computing a readable diagram layout");
+    const renderData = await prepareRenderData(
+      graph,
+      clusters,
+      repositoryIR,
+      allParseErrors,
+    );
+
+    const repoMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
 
     const id = randomUUID();
     const result: AnalysisResult = {

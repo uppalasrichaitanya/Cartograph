@@ -1,6 +1,6 @@
 # Cartograph
 
-Cartograph turns a JavaScript or TypeScript project zip into a shareable, interactive dependency map. Graph structure comes only from static analysis: no model creates, removes, or reroutes nodes or edges.
+Cartograph turns a JavaScript, TypeScript, or Python project zip into a shareable, interactive dependency map. Graph structure comes only from static analysis: no model creates, removes, or reroutes nodes or edges.
 
 ## Run locally
 

@@ -1,294 +1,2239 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+ *
+ *  CARTOGRAPH — VISUAL FOUNDATIONS
+ *
+ *  The instrument is a survey. Not a dashboard, not an IDE, not a diagram
+ *  tool — a printed survey of terrain that already exists, drawn by someone
+ *  whose job is accuracy rather than persuasion.
+ *
+ *  That reading is not decoration; it is the product's own claim about
+ *  itself. Cartograph reports what static analysis found and marks what it
+ *  could not determine. A surveyor's plate does exactly this: it is measured,
+ *  it is annotated in the margin, it distinguishes surveyed ground from
+ *  estimated ground, and it never flatters the terrain.
+ *
+ *  Three consequences run through every token below.
+ *
+ *  1. The ground is paper, and the paper is warm. Ivory rather than grey or
+ *     white, because that is the stock a survey is actually printed on —
+ *     rag paper yellows, and a drawing meant to be kept and re-read is drawn
+ *     on something that lasts. The warmth is not nostalgia; it is what makes
+ *     charcoal ink read as ink rather than as text rendered on a screen.
+ *
+ *  2. Every colour has exactly one meaning, and no colour is decorative.
+ *     RC1 carried 62 hex literals with no rule governing which meant what.
+ *     Here there are five chromatic tokens and each answers one question:
+ *
+ *       rust     the subject — what you asked about, and the brand's own ink
+ *       forest   verified evidence — what we established, and can show
+ *       amber    a cycle — a structure worth locating, not a fault
+ *       purple   generated reasoning — not ours, and never confusable with it
+ *       red      failure — an upload that did not work, an action that destroys
+ *
+ *     A reader who learns one of these has learned it everywhere. A colour
+ *     that appears in two roles teaches nothing in either.
+ *
+ *  3. Semantic colour is spent on ink and hairlines, almost never on fill.
+ *     A filled swatch claims area, and area is the strongest signal on the
+ *     plate — spending it on a status would make status louder than structure.
+ *     Fills are reserved for washes behind text that is already coloured.
+ *
+ *  ON RUST AND RED. These are the palette's one genuine hazard: both are warm,
+ *  and "your selection" must never read as "something is wrong." They are
+ *  separated on two channels rather than one — red is 10° cooler in hue but
+ *  also markedly darker (7.5:1 against ivory versus rust's 5.0:1), and red
+ *  appears only inside a wash-and-hairline container that rust never uses. In
+ *  greyscale the two are still tellable apart by weight alone.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
-  --ink: #182033;
-  --muted: #687087;
-  --line: #dfe4ee;
-  --paper: #f7f8fb;
-  --surface: #ffffff;
-  --blue: #3851e8;
-  --blue-dark: #2438bc;
-  --amber: #e99322;
-  --amber-pale: #fff6e6;
-  --shadow: 0 18px 60px rgba(28, 43, 91, 0.12);
-  --panel-width: 390px;
-  --transition-fast: 150ms ease;
-  --transition-normal: 220ms ease;
-  --transition-slow: 300ms ease;
-  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  /* ─── Ground and surface ──────────────────────────────────────────────
+   *
+   * Three levels, and elevation is structural rather than decorative:
+   * a surface is higher because it is a different KIND of thing, not
+   * because it is more important.
+   *
+   *   paper     the table. The map's ground and the page's ground.
+   *   surface   a plate laid on the table. Nodes, panels, popovers.
+   *   well      an area recessed INTO a surface. Inputs, code, evidence.
+   */
+  --paper: #F4F0E6;
+  --surface: #FCFAF5;
+  --well: #EBE6D9;
+
+  /* ─── Ink ─────────────────────────────────────────────────────────────
+   *
+   * One ramp, three weights. Every one of these clears WCAG AA (4.5:1) on
+   * all three grounds above — including --ink-faint, which is deliberately
+   * darker than it looks like it needs to be. "Quiet" must never mean
+   * "unreadable"; recession is a matter of relative weight, not of pushing
+   * text toward the background until it disappears.
+   */
+  /* Charcoal, warmed. A blue-black on ivory reads as a colour mismatch — two
+   * different light sources in one image. This is the ink a warm stock is
+   * actually printed in. */
+  --ink: #232019;
+  --ink-muted: #5C554A;
+  --ink-faint: #6B6357;
+
+  /* Hairlines. Not text, and never used as such. */
+  --rule: #D6CFBF;
+  --rule-strong: #B8AF9B;
+
+  /* ─── Rust — the subject, and the brand ───────────────────────────────
+   *
+   * Burnt rust does double duty, and the two duties are the same one: it
+   * marks what the reader is currently asking about, and it is the ink
+   * Cartograph itself signs in. Selection, focus rings, the product mark, the
+   * landing page's rules and figure numbers.
+   *
+   * That doubling is deliberate rather than economical. The product's whole
+   * function is directing attention to one thing at a time; making its brand
+   * colour the same colour as "here is that thing" means the identity IS the
+   * function rather than a badge applied over it.
+   *
+   * --focus-deep is for rust text on a rust wash, where the base tone sits
+   * too close to its own ground to read comfortably.
+   */
+  --focus: #A84A26;
+  --focus-deep: #7E3418;
+  --focus-wash: #F6E9E1;
+
+  /* ─── Forest — verified evidence ──────────────────────────────────────
+   *
+   * What was established, and can be shown. Appears where evidence is
+   * actually read — the inspector's provenance and lineage — never on map
+   * geometry. Phase 1 established that marking the overwhelmingly common case
+   * turns the mark into wallpaper, so the map still says "verified" by the
+   * absence of any mark at all. Green is for the surface where a person has
+   * asked to see the basis.
+   */
+  --forest: #2C5A46;
+  --forest-wash: #E4EDE8;
+
+  /* ─── Amber — an import cycle ─────────────────────────────────────────
+   *
+   * A cycle is structurally provable and genuinely worth locating, which is
+   * why it keeps its name where "god module" and "orphan" lost theirs. Amber
+   * marks it in the inspector and on the node itself.
+   *
+   * It does NOT appear in the observations menu. Phase 6 established that
+   * colouring an observation as a fault "states a conclusion the measurement
+   * does not" — a cycle may be perfectly deliberate. Amber here means "this
+   * is the structure you were looking for", the colour of a marked feature on
+   * a chart, not of an alarm.
+   */
+  --amber: #7A5312;
+  --amber-wash: #F3EBD8;
+
+  /* ─── Purple — generated reasoning ────────────────────────────────────
+   *
+   * Reserved entirely for AI-assisted content, and nothing produces it yet.
+   * It is the one hue in the palette that is cool, and that is the point:
+   * every colour Cartograph uses to report its own findings is warm, so
+   * anything not measured by Cartograph is visibly not of the same family.
+   * A reader can tell generated from established without reading a label.
+   */
+  --assisted: #54467E;
+  --assisted-wash: #EAE6F2;
+
+  /* ─── Red — failure ───────────────────────────────────────────────────
+   *
+   * An upload that did not work; an action that destroys something. Never
+   * uncertainty — uncertainty is quiet, not alarming, and that distinction is
+   * the whole of Phase 1.
+   *
+   * Deeper than rust by a clear margin (7.5:1 on ivory against rust's 5.0:1)
+   * so that "wrong" and "selected" separate by weight even in greyscale.
+   */
+  --danger: #932020;
+  --danger-wash: #F6E5E3;
+
+  /* ─── Type scale ──────────────────────────────────────────────────────
+   *
+   * Six sizes. RC1 had thirty-two, which meant no size carried meaning:
+   * .82rem and .84rem cannot be told apart, so a reader learns nothing from
+   * the difference and the system teaches nothing.
+   *
+   * Each step here is a real jump, and each has one job:
+   *
+   *   display   the landing hero. Appears once.
+   *   title     section headings, the repository name, inspector subject.
+   *   body      prose and controls. The default reading size.
+   *   small     secondary detail, node sublabels, hints.
+   *   caption   marginalia — counts, kickers, keyboard hints.
+   *   micro     the survey stamp. Uppercase, tracked, structural labels.
+   *
+   * Sizes are in rem so they honour a reader's browser setting.
+   */
+  --text-display: clamp(2.75rem, 6.5vw, 4.5rem);
+  --text-title: 1.25rem;
+  --text-body: 0.875rem;
+  --text-small: 0.8125rem;
+  --text-caption: 0.75rem;
+  --text-micro: 0.6875rem;
+
+  /* Tracking. Small type needs air; display type needs the opposite. */
+  --track-display: -0.03em;
+  --track-title: -0.015em;
+  --track-micro: 0.09em;
+
+  /* The loaded faces, with a stack behind them.
+   *
+   * next/font defines --font-sans and --font-mono on <html>, so these read
+   * those and append fallbacks for the window before the webfont resolves
+   * and for the case where it fails entirely. The fallback for mono is a real
+   * monospace stack, never a proportional face: a path set in a proportional
+   * face stops being comparable character by character. */
+  --type-sans: var(--font-sans), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --type-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────────
+   *
+   * One base unit of 4px with a fixed ramp, replacing .52rem, .59rem,
+   * .64rem, .68rem, .71rem, .73rem and the rest of RC1's improvised values.
+   *
+   * A shared rhythm is what makes unrelated components look like they were
+   * drawn by one hand — the alignment is not a coincidence a reader has to
+   * notice, it is a property of the grid everything sits on.
+   */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+
+  /* ─── Radius ──────────────────────────────────────────────────────────
+   *
+   * Two values, replacing thirteen. Small for controls a finger or cursor
+   * lands on; plate for surfaces that hold content. Nothing is fully round
+   * except a true pill, which is its own case and named as such.
+   */
+  --radius-control: 5px;
+  --radius-plate: 9px;
+  --radius-pill: 999px;
+
+  /* ─── Elevation ───────────────────────────────────────────────────────
+   *
+   * Three levels, matching the three surfaces. RC1 declared one --shadow
+   * token, used it once, and wrote fourteen inline shadow literals beside it.
+   *
+   * Every shadow here is the same hue as the ink, at low alpha, in two
+   * layers: a tight contact shadow that says "resting on" and a wider cast
+   * that says "how far above". Nothing glows; a glow implies a light source
+   * inside the object, and none of these emit light.
+   *
+   *   flat      on the table. Nodes at rest.
+   *   raised    lifted deliberately — the focused node, the zoom control.
+   *   over      genuinely above and temporarily blocking. Panels, dialogs.
+   */
+  /* Cast in the ink's own warm brown rather than neutral black. A grey shadow
+   * under a plate on ivory reads as a second light source and makes the whole
+   * surface look composited; a warm one reads as the same room. */
+  --shadow-flat: 0 1px 2px rgba(35, 32, 25, .06);
+  --shadow-raised: 0 2px 4px rgba(35, 32, 25, .08), 0 8px 16px rgba(35, 32, 25, .07);
+  --shadow-over: 0 1px 3px rgba(35, 32, 25, .10), 0 16px 40px rgba(35, 32, 25, .14);
+
+  --panel-width: 400px;
+  --rail-height: 56px;
+
+  /* ─── Motion ─────────────────────────────────────────────────────────────
+   *
+   * Three tiers, assigned by the cognitive significance of a change rather
+   * than by what kind of event caused it, and one easing family throughout.
+   * `lib/workspace/motion.ts` reads these properties rather than restating
+   * them, so the camera and the stylesheet cannot disagree about timing the
+   * way `--transition-*` and the hardcoded JS durations used to.
+   *
+   *   immediate    Changes needing no explanation — hover, focus, lens
+   *                toggles, emphasis and recession. Declared as a token even
+   *                though it is zero, because "this was decided to be
+   *                instant" and "nobody thought about this" must be
+   *                distinguishable when reading a rule.
+   *   connective   Changes needing causal linking — the inspector opening, a
+   *                selection settling, a camera move within one region.
+   *   structural   Changes that reorganize the mental model — region
+   *                expansion and cross-region navigation.
+   */
+  --motion-immediate: 0ms;
+  --motion-connective: 180ms;
+  --motion-structural: 400ms;
+
+  /* One leg of a two-legged structural transition. Exactly half of
+   * --motion-structural: a region change recedes and then arrives, and the
+   * pair must cost one structural duration rather than two. JS reads this
+   * token for its swap point; a test pins the halving. */
+  --motion-structural-leg: 200ms;
+
+  /* Continuous indicators — not a tier.
+   *
+   * A tier describes a transition between two states. A loader is neither
+   * state: it is evidence that work is genuinely in progress, and it repeats
+   * for as long as that remains true. One rate for all of them, so the
+   * interface has a single pulse rather than four competing ones. */
+  --motion-loader: 1500ms;
+
+  /* The one easing family. A standard deceleration: full speed at the start,
+   * settling at the end, no overshoot. Nothing in a map of fixed positions
+   * should imply its target moved. Mirrored exactly by motionEase() in JS. */
+  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * { box-sizing: border-box; }
 html { background: var(--paper); }
-body { margin: 0; color: var(--ink); background: var(--paper); font-family: Arial, Helvetica, sans-serif; }
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--type-sans);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
 button, input { font: inherit; }
 button { cursor: pointer; }
-button:disabled { cursor: wait; opacity: .65; }
+button:disabled { cursor: not-allowed; opacity: .5; }
 a { color: inherit; text-decoration: none; }
 
-/* ─── Focus Visible ─── */
-:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+/* Paths, counts, and identifiers are monospaced wherever they appear.
+ * A path is compared character by character; it must be set in a face that
+ * makes that comparison possible. */
+code, kbd, samp { font-family: var(--type-mono); }
+
+/* ─── Focus Visible ───────────────────────────────────────────────────────
+ *
+ * The accent, again — keyboard focus IS "this is the subject", reached by a
+ * different means than the pointer. Using the same colour for both means a
+ * keyboard user and a mouse user learn one vocabulary rather than two. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
 
 /* ─── Landing ─── */
-.landing-shell { min-height: 100vh; padding: 0 5vw 4rem; background: radial-gradient(circle at 7% 15%, #e8ecff 0, transparent 24rem), radial-gradient(circle at 88% 75%, #f7eddb 0, transparent 28rem), var(--paper); }
-.site-header, .diagram-header { max-width: 1240px; margin: auto; min-height: 82px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
-.brand { display: inline-flex; align-items: center; gap: .6rem; font-size: 1.08rem; font-weight: 700; letter-spacing: -.025em; border: none; background: none; padding: 0; }
-.brand-mark { display: grid; place-items: center; width: 27px; height: 27px; color: white; background: var(--blue); border-radius: 8px; font-weight: 400; }
-.header-note, .diagram-meta { color: var(--muted); font-size: .82rem; }
-.hero { max-width: 810px; margin: 0 auto; padding: 8.5rem 0 5.75rem; text-align: center; }
-.eyebrow { margin: 0 0 .75rem; color: var(--blue); font-size: .71rem; font-weight: 700; letter-spacing: .14em; }
+/* ─── Landing ─────────────────────────────────────────────────────────────
+ *
+ * The sheet. Ivory ground, hairline rules, and a left-aligned measure —
+ * centred text belongs to marketing pages, and a survey's title block is set
+ * against the sheet's edge because that is where a reader's eye starts.
+ *
+ * The two radial gradients that used to sit here are gone. They were a blue
+ * bloom and an amber bloom over the whole page: decoration with no meaning
+ * attached, spending the reader's first impression on atmosphere. */
+.landing-shell {
+  min-height: 100vh;
+  padding: 0 5vw var(--space-8);
+  background: var(--paper);
+}
+.site-header, .diagram-header {
+  max-width: 1180px;
+  margin: auto;
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rule);
+}
+/* The wordmark. Rust, because the product signs in the same ink it marks
+ * attention with — the identity and the function are one thing. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  color: var(--focus);
+  font-size: var(--text-body);
+  font-weight: 600;
+  letter-spacing: var(--track-title);
+  border: none;
+  background: none;
+}
+.header-note, .diagram-meta {
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+
+.hero {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-8) 0 var(--space-7);
+}
+/* The sheet designation, with a rule running out from it. A plate states its
+ * subject and method in the margin before the drawing begins. */
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.eyebrow-rule {
+  width: 40px;
+  height: 1px;
+  flex-shrink: 0;
+  background: var(--focus);
+}
+/* The thesis. Tight leading and a hard negative track so the two lines read
+ * as one typographic block — a stated claim, not a slogan. */
+.hero h1 {
+  max-width: 20ch;
+  margin: 0 0 var(--space-5);
+  color: var(--ink);
+  letter-spacing: var(--track-display);
+  font-size: var(--text-display);
+  font-weight: 600;
+  line-height: 1.02;
+}
+/* The lede. Title size rather than body — found in rendered verification: at
+ * body size the drop from a 72px headline to 14px was severe enough that the
+ * paragraph read as a caption rather than as the sentence explaining the
+ * claim above it. Title is the scale's next real step, so this stays inside
+ * the six rather than inventing a seventh for one paragraph. */
+.hero-copy {
+  max-width: 52ch;
+  margin: 0 0 var(--space-6);
+  color: var(--ink-muted);
+  font-size: var(--text-title);
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
 h1, h2, h3, p { margin-top: 0; }
-.hero h1 { max-width: 760px; margin: 0 auto 1.25rem; letter-spacing: -.065em; font-size: clamp(3rem, 7.2vw, 6.2rem); line-height: .94; }
-.hero-copy { max-width: 620px; margin: 0 auto 2.7rem; color: var(--muted); font-size: 1.18rem; line-height: 1.65; }
 
-/* ─── Upload Form ─── */
-.upload-form { width: min(100%, 680px); margin: auto; display: grid; gap: 1rem; }
-.file-drop { min-height: 154px; padding: 1.4rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .55rem; color: var(--muted); background: rgba(255,255,255,.72); border: 1.5px dashed #b7c1d4; border-radius: 16px; transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast); cursor: pointer; }
-.file-drop:hover { border-color: var(--blue); background: #fff; }
-.file-drop.is-dragging { border-color: var(--blue); border-style: solid; background: #edf0ff; transform: scale(1.01); }
-.file-drop.is-file-selected { border-color: #78829a; border-style: solid; background: #fff; }
+/* ─── Upload Form ─────────────────────────────────────────────────────────
+ *
+ * Left-aligned with the hero rather than centred, and no longer a rounded
+ * dropzone floating in space: a bordered field with a square-ish corner,
+ * sitting on the sheet like a form to be filled in. */
+.upload-form { width: min(100%, 560px); margin: 0; display: grid; gap: var(--space-3); }
+/* Immediate: pointer feedback. Animating it would report the pointer's
+ * arrival later than the pointer arrived. */
+.file-drop {
+  min-height: 116px;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-plate);
+  cursor: pointer;
+}
+.file-drop:hover { border-color: var(--focus); }
+.file-drop.is-dragging { border-color: var(--focus); border-style: solid; background: var(--focus-wash); }
+.file-drop.is-file-selected { border-color: var(--rule-strong); border-style: solid; }
 .file-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.file-drop small { color: #8b93a8; }
-.file-icon { display: grid; place-items: center; width: 32px; height: 32px; color: var(--blue); background: #edf0ff; border-radius: 50%; font-size: 1.4rem; transition: transform var(--transition-fast); }
-.is-dragging .file-icon { animation: iconBounce .5s ease infinite; }
-@keyframes iconBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-.button { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: .7rem 1.1rem; border: 0; border-radius: 9px; font-weight: 700; }
-.button-primary { color: white; background: var(--blue); transition: background var(--transition-fast), transform var(--transition-fast); }
-.button-primary:hover:not(:disabled) { background: var(--blue-dark); transform: translateY(-1px); }
-.button-secondary { color: #34405a; background: #fff; border: 1px solid var(--line); transition: border-color var(--transition-fast), color var(--transition-fast); }
-.button-secondary:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
-.upload-actions { display: flex; gap: .75rem; }
+.file-drop small { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
+.file-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--focus);
+  background: var(--focus-wash);
+  border-radius: var(--radius-control);
+  font-size: var(--text-body);
+}
+.is-dragging .file-icon { animation: iconBounce var(--motion-loader) var(--motion-ease) infinite; }
+@keyframes iconBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-control);
+  font-size: var(--text-small);
+  font-weight: 500;
+}
+.button-primary { color: var(--surface); background: var(--focus); }
+.button-primary:hover:not(:disabled) { background: var(--focus-deep); }
+.button-secondary { color: var(--ink-muted); background: var(--surface); border: 1px solid var(--rule); }
+.button-secondary:hover:not(:disabled) { border-color: var(--rule-strong); color: var(--ink); }
+.upload-actions { display: flex; gap: var(--space-2); }
 .upload-actions .button { flex: 1; }
-.privacy-note { margin: .25rem 0 0; color: #8991a3; font-size: .77rem; }
+.privacy-note {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-faint);
+  font-size: var(--text-caption);
+}
 
-/* ─── Progress Stream / Stepper ─── */
-.progress-stream { display: flex; align-items: flex-start; gap: .75rem; padding: .9rem 1rem; text-align: left; background: #eef0ff; border-radius: 10px; color: #293b9e; }
-.progress-stream p { margin: .18rem 0 0; font-size: .85rem; color: #5869b3; }
-.progress-pulse { flex: 0 0 auto; width: 9px; height: 9px; margin-top: .26rem; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 0 rgba(56,81,232,.45); animation: pulse 1.5s infinite; }
-@keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(56,81,232,0); } 100% { box-shadow: 0 0 0 0 rgba(56,81,232,0); } }
+/* ─── The Specimen Plate ──────────────────────────────────────────────────
+ *
+ * THE SHOWCASE, and the page's second signature after the type.
+ *
+ * Constructed as an atlas figure: a designation line in the margin, the plate
+ * itself boxed by a single hairline, and a legend beneath keyed to the marks
+ * in the drawing. That structure is not decoration — it is the reason the
+ * figure is legible without a caption explaining how to read the caption.
+ *
+ * It replaces nothing (the page previously ended at three text columns), and
+ * it adds no claim: every mark shown is one the live map actually uses. */
+.specimen {
+  max-width: 1180px;
+  margin: 0 auto var(--space-8);
+}
+.specimen-head { margin-bottom: var(--space-4); }
+.specimen-designation {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+/* The figure number, in rust. The one place on the page besides the wordmark
+ * and the leader lines where the brand ink appears. */
+.specimen-fig { color: var(--focus); }
+.specimen-rule { flex: 1; height: 1px; background: var(--rule); }
+.specimen-title {
+  margin: 0;
+  max-width: 34ch;
+  font-size: var(--text-title);
+  font-weight: 600;
+  letter-spacing: var(--track-title);
+}
+/* The plate. A hairline box on the ivory ground — the drawing is inset into
+ * the sheet, not raised above it, so it reads as printed rather than as a
+ * card in a feed. */
+.specimen-plate {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-plate);
+  overflow: hidden;
+  background: var(--paper);
+}
+.specimen-svg { display: block; width: 100%; height: auto; }
 
-.progress-stepper { display: flex; gap: .5rem; padding: 1rem 1.1rem; background: #eef0ff; border-radius: 10px; flex-wrap: wrap; }
-.progress-step { display: flex; align-items: center; gap: .4rem; color: #8a94be; font-size: .78rem; font-weight: 600; transition: color var(--transition-normal); }
-.progress-step.is-done { color: #293b9e; }
-.progress-step.is-active { color: #293b9e; }
-.progress-step-icon { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font-size: .6rem; flex-shrink: 0; }
-.progress-step.is-pending .progress-step-icon { border: 1.5px solid #b3bce0; }
-.progress-step.is-done .progress-step-icon { background: #293b9e; color: white; }
-.progress-step.is-active .progress-step-icon { background: var(--blue); color: white; animation: pulse 1.5s infinite; }
-.progress-step-separator { color: #b3bce0; font-size: .7rem; margin: 0 .1rem; }
+/* Text inside the drawing. Set here rather than as SVG attributes so the
+ * figure inherits the same scale and faces as everything else — one type
+ * system, including inside illustrations. */
+.spec-kicker {
+  fill: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: 8px;
+  letter-spacing: .09em;
+}
+.spec-kicker-focus { fill: var(--focus-deep); }
+.spec-name {
+  fill: var(--ink);
+  font-family: var(--type-sans);
+  font-size: 13px;
+  font-weight: 600;
+}
+.spec-name-quiet { fill: var(--ink-muted); font-weight: 400; font-family: var(--type-mono); font-size: 12px; }
+.spec-path { fill: var(--ink-faint); font-family: var(--type-mono); font-size: 9px; }
+.spec-marker { fill: var(--ink-faint); font-family: var(--type-mono); font-size: 9px; }
+/* Margin annotations — the surveyor's hand, added after the plate was
+ * pressed. Rust, because a correction is overprinted in the same ink the
+ * product marks attention with. */
+.spec-note { fill: var(--focus-deep); font-family: var(--type-mono); font-size: 9.5px; }
 
-/* ─── Upload Error ─── */
-.form-error { margin: 0; color: #b42318; font-size: .9rem; }
-.upload-error-card { padding: 1rem 1.15rem; background: #fef3f2; border: 1px solid #fecdc9; border-radius: 10px; }
-.upload-error-card .error-title { display: flex; align-items: center; gap: .5rem; margin: 0 0 .4rem; color: #b42318; font-size: .9rem; font-weight: 700; }
-.upload-error-card .error-message { margin: 0 0 .75rem; color: #912018; font-size: .85rem; line-height: 1.5; }
-.upload-error-card .error-actions { display: flex; gap: .5rem; }
-.upload-error-card .error-actions button { min-height: 34px; padding: .4rem .8rem; font-size: .8rem; border-radius: 7px; }
-.error-troubleshoot { margin-top: .75rem; }
-.error-troubleshoot summary { color: #912018; font-size: .78rem; cursor: pointer; font-weight: 600; }
-.error-troubleshoot ul { margin: .5rem 0 0; padding-left: 1.2rem; color: #912018; font-size: .78rem; line-height: 1.7; }
+/* The legend. Four rows, keyed to the drawing above. */
+.specimen-legend {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--rule);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-plate) var(--radius-plate);
+}
+.legend-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-right: 1px solid var(--rule);
+}
+.legend-row:last-child { border-right: 0; }
+.legend-sample { flex-shrink: 0; padding-top: 3px; }
+.legend-text dt {
+  color: var(--ink);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.legend-text dd {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+  line-height: 1.45;
+}
 
-/* ─── Loading Skeleton ─── */
-.loading-skeleton { padding: 2rem; }
-.skeleton-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; }
-.skeleton-title { width: 280px; height: 36px; background: linear-gradient(90deg, #eef0f6 25%, #f7f8fb 50%, #eef0f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
-.skeleton-stats { display: flex; gap: 1rem; }
-.skeleton-stat { width: 60px; height: 44px; background: linear-gradient(90deg, #eef0f6 25%, #f7f8fb 50%, #eef0f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
-.skeleton-graph { display: flex; gap: 1.5rem; flex-wrap: wrap; padding: 2rem; background: #fff; border: 1px solid var(--line); border-radius: 15px; min-height: 320px; align-items: flex-start; align-content: flex-start; }
-.skeleton-node { width: 140px; height: 70px; background: linear-gradient(90deg, #eef0f6 25%, #f7f8fb 50%, #eef0f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 10px; }
-.skeleton-anomalies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem; }
-.skeleton-anomaly { height: 72px; background: linear-gradient(90deg, #eef0f6 25%, #f7f8fb 50%, #eef0f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 10px; }
+/* Legend swatches. Each is the actual encoding at small scale — a border
+ * style, not a colour chip, because the encoding IS the border style. */
+.swatch {
+  display: block;
+  width: 22px;
+  height: 14px;
+  border-radius: 2px;
+}
+.swatch-verified { background: var(--surface); border: 1px solid var(--rule-strong); }
+.swatch-dashed { background: var(--surface); border: 1px dashed var(--rule-strong); }
+.swatch-open {
+  background: transparent;
+  border: 1px dashed var(--rule-strong);
+  border-right: 0;
+  border-radius: 2px 0 0 2px;
+}
+.swatch-focus { background: var(--focus-wash); border: 2px solid var(--focus); }
+
+/* ─── Progress Stream / Stepper ───────────────────────────────────────────
+ *
+ * Honest progress. Each step reports a stage that is genuinely running, and
+ * the pulse marks the one currently working — never a simulated advance. */
+.progress-pulse {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--focus);
+  box-shadow: 0 0 0 0 rgba(168, 74, 38, .4);
+  animation: pulse var(--motion-loader) infinite;
+}
+@keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(168, 74, 38, 0); } 100% { box-shadow: 0 0 0 0 rgba(168, 74, 38, 0); } }
+
+.progress-stepper {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--well);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-plate);
+  flex-wrap: wrap;
+}
+/* Immediate: a step's state is a fact about the analysis, not a movement.
+ * Fading it in would report progress later than progress happened. */
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.progress-step.is-done { color: var(--ink-muted); }
+.progress-step.is-active { color: var(--focus-deep); }
+/* Square, not round. A step is a station on a traverse — the same
+ * registration mark the node handles use, at the same 1px radius. */
+.progress-step-icon {
+  width: 12px;
+  height: 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 1px;
+  font-size: var(--text-micro);
+  flex-shrink: 0;
+}
+.progress-step.is-pending .progress-step-icon { border: 1px solid var(--rule-strong); }
+.progress-step.is-done .progress-step-icon { background: var(--ink-muted); color: var(--surface); }
+.progress-step.is-active .progress-step-icon { background: var(--focus); color: var(--surface); animation: pulse var(--motion-loader) infinite; }
+.progress-step-separator { color: var(--rule-strong); font-size: var(--text-micro); }
+
+/* ─── Upload Error ────────────────────────────────────────────────────────
+ *
+ * Red, and the only place on the landing page it appears. An error states
+ * what happened and what to do about it — it does not apologise, and it is
+ * never vague about which of the two it is saying. */
+.form-error { margin: 0; color: var(--danger); font-size: var(--text-small); }
+.upload-error-card {
+  padding: var(--space-4);
+  background: var(--danger-wash);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-plate);
+}
+.upload-error-card .error-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  color: var(--danger);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.upload-error-card .error-message { margin: 0 0 var(--space-3); color: var(--ink); font-size: var(--text-body); line-height: 1.5; }
+.upload-error-card .error-actions { display: flex; gap: var(--space-2); }
+.upload-error-card .error-actions button {
+  min-height: 32px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-small);
+  border-radius: var(--radius-control);
+}
+.error-troubleshoot { margin-top: var(--space-3); }
+.error-troubleshoot summary { color: var(--ink-muted); font-size: var(--text-caption); cursor: pointer; }
+.error-troubleshoot ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); color: var(--ink-muted); font-size: var(--text-caption); line-height: 1.7; }
+
+/* ─── Loading Skeleton ────────────────────────────────────────────────────
+ *
+ * A plate being drawn. The sweep is a single pass of light across unexposed
+ * stock — genuine waiting, honestly rendered, with no implied percentage. */
+.loading-skeleton { padding: var(--space-6); }
+.skeleton-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: var(--space-5); }
+.skeleton-title { width: 280px; height: 32px; background: linear-gradient(90deg, var(--well) 25%, var(--surface) 50%, var(--well) 75%); background-size: 200% 100%; animation: shimmer var(--motion-loader) infinite; border-radius: var(--radius-control); }
+.skeleton-stats { display: flex; gap: var(--space-4); }
+.skeleton-stat { width: 60px; height: 40px; background: linear-gradient(90deg, var(--well) 25%, var(--surface) 50%, var(--well) 75%); background-size: 200% 100%; animation: shimmer var(--motion-loader) infinite; border-radius: var(--radius-control); }
+.skeleton-graph { display: flex; gap: var(--space-5); flex-wrap: wrap; padding: var(--space-6); background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius-plate); min-height: 320px; align-items: flex-start; align-content: flex-start; }
+.skeleton-node { width: 140px; height: 66px; background: linear-gradient(90deg, var(--well) 25%, var(--surface) 50%, var(--well) 75%); background-size: 200% 100%; animation: shimmer var(--motion-loader) infinite; border-radius: var(--radius-control); }
+.skeleton-anomalies { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-top: var(--space-4); }
+.skeleton-anomaly { height: 68px; background: linear-gradient(90deg, var(--well) 25%, var(--surface) 50%, var(--well) 75%); background-size: 200% 100%; animation: shimmer var(--motion-loader) infinite; border-radius: var(--radius-control); }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* ─── Principles ─── */
-.principles { max-width: 1040px; margin: auto; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
-.principles article { padding: 2rem 2.2rem 1rem; border-right: 1px solid var(--line); }
+/* ─── Principles ──────────────────────────────────────────────────────────
+ *
+ * Read → Draw → Mark. The numbering is kept because these three ARE ordered:
+ * they are the pipeline, in the sequence it actually runs, and each step
+ * depends on the one before it. Numbering an unordered set would be the
+ * decorative kind — structure implying a sequence the content does not have.
+ *
+ * The headings were also wrong before this pass. "Useful warnings" described
+ * behaviour Phase 6 removed: cycles, hubs and unimported files are no longer
+ * framed as faults, so a landing page promising warnings was advertising a
+ * product that no longer existed. */
+.principles {
+  max-width: 1180px;
+  margin: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--rule);
+}
+.principles article { padding: var(--space-5) var(--space-5) var(--space-4); border-right: 1px solid var(--rule); }
 .principles article:first-child { padding-left: 0; }
-.principles article:last-child { border-right: 0; }
-.principles span { color: var(--blue); font-size: .75rem; font-weight: 700; }
-.principles h2 { margin: .55rem 0 .65rem; font-size: 1.18rem; letter-spacing: -.03em; }
-.principles p { color: var(--muted); line-height: 1.55; font-size: .9rem; }
+.principles article:last-child { border-right: 0; padding-right: 0; }
+/* The plate number. Mono and rust — the same register as the specimen's
+ * "Fig. 1", because they are the same kind of mark. */
+.plate-no {
+  display: block;
+  color: var(--focus);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+}
+.principles h2 { margin: var(--space-2) 0 var(--space-2); font-size: var(--text-body); font-weight: 600; letter-spacing: var(--track-title); }
+.principles p { color: var(--ink-muted); line-height: 1.55; font-size: var(--text-caption); }
 
-/* ─── Diagram Page ─── */
-.diagram-page { min-height: 100vh; padding: 0 clamp(1rem, 3vw, 3.5rem) 3rem; background: #f8f9fc; }
-.diagram-header { max-width: none; }
-.diagram-meta { display: flex; align-items: center; gap: 1rem; }
-.share-button { padding: .52rem .75rem; color: #34405a; background: #fff; border: 1px solid var(--line); border-radius: 7px; font-size: .82rem; font-weight: 650; transition: border-color var(--transition-fast), color var(--transition-fast); }
-.share-button:hover { border-color: var(--blue); color: var(--blue); }
+/* ─── Workspace Frame ───────────────────────────────────────────────────
+ *
+ * The workspace occupies the viewport exactly. Nothing scrolls except
+ * content inside the inspector.
+ *
+ * This replaces a scrolling document in which the map was one element among
+ * several stacked vertically, with observations below the fold. In that
+ * layout the primary representation could scroll out of view — and reaching
+ * the observations required scrolling the map away, destroying the spatial
+ * anchor every other orientation cue depends on.
+ *
+ * Two regions in normal flow: a fixed-height rail, and the map taking all
+ * remaining space. The inspector and the context cluster are overlays
+ * positioned against the map, so neither displaces it.
+ */
+.workspace-frame {
+  display: grid;
+  grid-template-rows: var(--rail-height) 1fr;
+  /* minmax(0, 1fr) rather than the implicit `auto`: a grid track sized `auto`
+   * cannot shrink below its content's min-content width, so a wide rail would
+   * push the track — and the map with it — past the viewport edge, where
+   * overflow:hidden would silently clip part of the map out of reach. */
+  grid-template-columns: minmax(0, 1fr);
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper);
+}
 
-/* ─── Repo Context Bar ─── */
-.repo-context-bar { display: flex; align-items: center; gap: .75rem; padding: .6rem 0; color: var(--muted); font-size: .78rem; flex-wrap: wrap; }
-.repo-context-name { color: var(--ink); font-weight: 700; font-size: .85rem; }
-.repo-context-dot { color: var(--line); }
-.repo-context-badge { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .5rem; background: #eef0ff; color: #3a4fc7; border-radius: 99px; font-size: .7rem; font-weight: 650; }
-.repo-context-badge.is-framework { background: #edf9ee; color: #2a7d34; }
+/* ─── Rail ─────────────────────────────────────────────────────────────
+ *
+ * The sheet's title block. On a survey plate this is the strip carrying what
+ * was surveyed, at what scale, by whom — set apart from the drawing by a
+ * single rule, never by a shadow, because it is part of the same sheet rather
+ * than something resting on top of it.
+ *
+ * So: one hairline underneath, no elevation. The rail is not above the map;
+ * it is the margin of the same document. */
+.rail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  /* min-width:0 lets the rail shrink with the frame; without it a flex item
+   * refuses to go below its content width and widens the grid track. */
+  min-width: 0;
+  padding: 0 var(--space-4);
+  overflow: hidden;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+}
 
-/* ─── Breadcrumb ─── */
-.breadcrumb-nav { display: flex; align-items: center; gap: .35rem; margin: 0 0 .85rem; font-size: .82rem; }
-.breadcrumb-item { padding: .4rem .65rem; color: var(--blue); background: none; border: 1px solid transparent; border-radius: 7px; font-weight: 650; font-size: .82rem; transition: background var(--transition-fast), border-color var(--transition-fast); }
-.breadcrumb-item:hover { background: #eef0ff; border-color: #d5daff; }
-.breadcrumb-item.is-current { color: var(--ink); cursor: default; }
-.breadcrumb-item.is-current:hover { background: none; border-color: transparent; }
-.breadcrumb-separator { color: #b3bce0; font-size: .7rem; user-select: none; }
+/* The product mark. Deliberately the quietest thing in the rail — micro
+ * scale, mono, tracked, in muted ink. Cartograph is the instrument; the
+ * repository is the subject. An instrument that shouts its own name over the
+ * measurement it is reporting has its priorities backwards. */
+.rail-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: 0;
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.rail-mark:hover { color: var(--ink); }
 
-/* ─── Diagram Title Row ─── */
-.diagram-title-row { padding: 2.8rem 0 1.25rem; display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; }
-.diagram-title-row h1 { margin: 0 0 .45rem; letter-spacing: -.05em; font-size: clamp(2rem, 4.5vw, 3.8rem); }
-.diagram-title-row p:not(.eyebrow) { margin: 0; color: var(--muted); }
+/* Repository identity. The most prominent text in the frame.
+ *
+ * Shrinkable, so a long repository name yields space rather than widening the
+ * rail. The name ellipsises; the metadata drops on narrow viewports.
+ *
+ * The name is set in sans at title scale; the counts beside it in mono at
+ * caption scale. That split is the sheet's own convention: the subject is
+ * prose, the measurements are figures, and a reader can tell which is which
+ * before reading either. */
+.rail-identity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  flex-shrink: 1;
+}
+.rail-repo-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: var(--track-title);
+}
+.rail-repo-meta {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
 
-/* ─── Summary Grid (clickable stats) ─── */
-.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(64px, 1fr)); gap: 1.2rem; }
-.summary-grid-item { text-align: right; padding: .5rem .6rem; background: none; border: 1px solid transparent; border-radius: 8px; cursor: pointer; transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast); }
-.summary-grid-item:hover { background: #eef0ff; border-color: #d5daff; transform: translateY(-1px); }
-.summary-grid-item.is-active { background: #eef0ff; border-color: var(--blue); }
-.summary-grid-item strong { display: block; font-size: 1.35rem; letter-spacing: -.04em; }
-.summary-grid-item span { color: var(--muted); font-size: .72rem; }
+/* ─── Rail Search ──────────────────────────────────────────────────────
+ *
+ * Search made visible. It looks like a field rather than a button because a
+ * field says "type here" without having to be told — recognition instead of
+ * recall. Clicking it opens the same overlay ⌘K does, so there is one search,
+ * reachable two ways, rather than two behaviours to learn.
+ *
+ * Sits centre-left, taking the slack in the rail: prominent enough to be
+ * found without competing with the repository name beside it. */
+/* A well, not a button. Recessed into the rail's surface, because that is what
+ * an input is: a place where something goes IN. The inset hairline at the top
+ * is the whole of the effect — no shadow, because a field does not float. */
+.rail-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  max-width: 22rem;
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-faint);
+  background: var(--well);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+.rail-search:hover {
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+.rail-search-icon { display: grid; place-items: center; flex-shrink: 0; }
+.rail-search-label {
+  flex: 1;
+  overflow: hidden;
+  font-size: var(--text-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The shortcut, drawn as a key. Mono because it is a literal keystroke, and
+ * on the surface colour so it reads as a cap sitting in the well. */
+.rail-search-kbd {
+  flex-shrink: 0;
+  padding: 0 var(--space-1);
+  color: var(--ink-faint);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+}
 
-/* ─── Back Button ─── */
-.back-button { display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 .85rem; padding: .6rem 1rem; color: #34405a; background: #fff; border: 1.5px solid var(--line); border-radius: 8px; font-size: .82rem; font-weight: 700; transition: border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast); }
-.back-button:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(56,81,232,.1); }
-.back-button .back-arrow { font-size: 1rem; }
+.rail-controls { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.rail-button {
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  font-size: var(--text-small);
+  font-weight: 500;
+}
+.rail-button:hover { border-color: var(--rule-strong); color: var(--ink); }
+/* Open is a held state, so it takes the accent — the same vocabulary as any
+ * other "this is currently the subject". */
+.rail-button.is-open {
+  color: var(--focus-deep);
+  background: var(--focus-wash);
+  border-color: var(--focus);
+}
 
-.layout-notice { margin: 0 0 .85rem; padding: .7rem .9rem; color: #8a5000; background: var(--amber-pale); border-radius: 8px; font-size: .85rem; }
+/* ─── Breadcrumb ─────────────────────────────────────────────────────────
+ *
+ * Hierarchy position. Set in mono because it is a path — the same reason the
+ * inspector's subject is, and the reader should recognise it as one at a
+ * glance rather than by reading it. */
+.breadcrumb-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-family: var(--type-mono);
+  font-size: var(--text-caption);
+}
+.breadcrumb-item {
+  padding: 0 var(--space-1);
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: inherit;
+}
+.breadcrumb-item:hover { color: var(--focus-deep); }
+/* Where you are now. Full ink, no accent — the accent is for what you asked
+ * about, and "the page I am on" is not a selection. */
+.breadcrumb-item.is-current { color: var(--ink); font-weight: 500; cursor: default; }
+.breadcrumb-item.is-current:hover { color: var(--ink); }
+.breadcrumb-separator { color: var(--rule-strong); user-select: none; }
 
-/* ─── Canvas Card ─── */
-.canvas-card { position: relative; width: 100%; height: min(78vh, 860px); min-height: 480px; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 15px; box-shadow: var(--shadow); transition: width 400ms var(--ease-spring), opacity var(--transition-fast); }
-.canvas-card.has-panel-open { width: calc(100% - var(--panel-width) - 1.25rem); }
-.canvas-card.is-fading { opacity: 0; }
-.react-flow__background { background: #fff; }
+/* ─── Lens Popover ─────────────────────────────────────────────────────
+ *
+ * Observations are applied to the map rather than displayed beside it. The
+ * popover selects which relationships the map should emphasise; the answer
+ * appears in the geometry, not in this list.
+ *
+ * It replaces a three-card grid that sat below the fold, where reaching it
+ * meant scrolling the map out of view. Expands on intent, collapses after.
+ */
+.lens-popover {
+  position: absolute;
+  top: calc(var(--rail-height) + var(--space-2));
+  right: var(--space-4);
+  z-index: 20;
+  width: min(340px, calc(100vw - var(--space-6)));
+  padding: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-over);
+}
+/* The survey stamp. Every structural label in the product is set this way —
+ * mono, micro, tracked, uppercase — so a reader learns one pattern for "this
+ * names a section" and never has to relearn it. */
+.lens-popover-heading {
+  margin: var(--space-1) var(--space-2) var(--space-2);
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+}
+.lens-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+}
+.lens-item + .lens-item { margin-top: 1px; }
+.lens-item:hover { background: var(--well); }
+.lens-item.is-active {
+  background: var(--focus-wash);
+  border-color: var(--focus);
+}
+.lens-item-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-small);
+  font-weight: 500;
+}
+/* The measurement. Mono and tabular, because these are figures a reader
+ * compares down a column. */
+.lens-item-count {
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.lens-item.is-active .lens-item-count { color: var(--focus-deep); }
+/* What was measured. Quiet and beneath the label, so the lens reads as a
+ * description of evidence rather than a verdict about quality. */
+.lens-item-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-faint);
+  font-size: var(--text-caption);
+  line-height: 1.4;
+}
+.lens-item-empty {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-faint);
+  font-size: var(--text-caption);
+}
+.lens-observations { display: grid; gap: 1px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.lens-observation {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  overflow: hidden;
+  color: var(--ink-muted);
+  background: var(--well);
+  border: 0;
+  border-radius: 3px;
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lens-observation:hover { background: var(--focus-wash); color: var(--focus-deep); }
 
-/* ─── Architecture Node ─── */
-.architecture-node { width: 100%; height: 100%; padding: .78rem .9rem; color: var(--ink); background: #fff; border: 1px solid #ced6e5; border-radius: 10px; box-shadow: 0 4px 13px rgba(31, 48, 88, .08); transition: box-shadow var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), opacity 180ms ease, filter 180ms ease; }
-.architecture-node:hover { z-index: 3; border-color: var(--blue); box-shadow: 0 9px 24px rgba(46,65,160,.2); transform: translateY(-2px); }
-.architecture-node.is-warning { border-color: #e6a13d; background: #fffaf1; }
-.architecture-node.is-selected { transform: scale(1.02); z-index: 4; border: 2px solid var(--blue); box-shadow: 0 0 0 4px rgba(56,81,232,0.15), 0 14px 32px rgba(46,65,160,.22); background: #f7f8ff; }
-.architecture-node.is-neighbor { border-color: #7b92f0; background: #f0f3ff; }
-.architecture-node.is-dimmed { opacity: 0.18; filter: grayscale(30%); pointer-events: none; }
-.architecture-node.is-pulsing { animation: nodePulse 700ms ease-out; }
-@keyframes nodePulse { 0% { box-shadow: 0 0 0 0 rgba(56,81,232,0.65); } 70% { box-shadow: 0 0 0 14px rgba(56,81,232,0); } 100% { box-shadow: 0 0 0 0 rgba(56,81,232,0); } }
-.architecture-node .node-kicker { margin-bottom: .28rem; color: #78829a; font-size: .59rem; font-weight: 700; letter-spacing: .12em; }
-.architecture-node strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .91rem; letter-spacing: -.015em; }
-.architecture-node span { display: block; overflow: hidden; margin-top: .25rem; color: #768198; text-overflow: ellipsis; white-space: nowrap; font-size: .71rem; }
-.architecture-node em { display: inline-block; margin-top: .35rem; padding: .13rem .32rem; color: #8c5100; background: #fff0d2; border-radius: 4px; font-size: .64rem; font-style: normal; font-weight: 700; cursor: pointer; }
-.architecture-node em:hover { background: #ffe7b3; }
-.node-handle { width: 7px !important; height: 7px !important; background: var(--blue) !important; border: 0 !important; }
+/* ─── Map Region ───────────────────────────────────────────────────────
+ *
+ * Takes all space the rail does not. It is never resized by the inspector:
+ * node world-positions stay fixed and the camera offsets instead, so nothing
+ * re-lays-out and nothing has to be re-recognised.
+ */
+/* Structural.
+ *
+ * A region change replaces everything on screen, so it is the one transition
+ * that genuinely reorganizes the mental model. The outgoing region recedes
+ * over one leg, the incoming one arrives over the other, and the two together
+ * cost one structural duration.
+ *
+ * The transition is declared on the base rule rather than on `.is-fading`, so
+ * BOTH legs are governed by it: a declaration living only on the modifier
+ * would animate the departure and snap the arrival, which is exactly the
+ * asymmetry Motion P8 forbids. Drilling in and coming back out therefore run
+ * the same movement in the same order — forward and reverse are one shape. */
+.map-region {
+  position: relative;
+  overflow: hidden;
+  /* Paper, not white. The map is the table the plates are laid on; the plates
+   * themselves are the only white in the frame, which is what makes them read
+   * as objects resting on a ground rather than as outlines drawn onto it. */
+  background: var(--paper);
+  transition: opacity var(--motion-structural-leg) var(--motion-ease);
+}
+.map-region.is-fading { opacity: 0; }
 
-/* ─── Anomalies / Analytics ─── */
-.anomalies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem; }
-.anomaly-card { min-width: 0; padding: 1.05rem 1.15rem; background: #fff; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
-.anomaly-card:hover { border-color: var(--blue); box-shadow: 0 4px 14px rgba(56,81,232,.1); transform: translateY(-1px); }
-.anomaly-card.is-active { border-color: var(--blue); background: #f7f8ff; }
-.anomaly-card h2 { margin: 0 0 .55rem; font-size: .83rem; }
-.anomaly-card h2 span { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: .3rem; color: var(--blue); background: #eff1ff; border-radius: 99px; font-size: .7rem; }
-.anomaly-card p { margin: 0; overflow: hidden; color: var(--muted); font-family: monospace; font-size: .72rem; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
-.anomaly-card .anomaly-items { margin: .5rem 0 0; display: grid; gap: .3rem; list-style: none; padding: 0; }
-.anomaly-card .anomaly-item { padding: .35rem .5rem; background: #f6f8fc; border-radius: 5px; font-family: monospace; font-size: .72rem; color: #3e4a64; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: background var(--transition-fast), color var(--transition-fast); border: none; text-align: left; width: 100%; }
-.anomaly-card .anomaly-item:hover { background: #edf0ff; color: var(--blue); }
+/* ─── The Graticule ────────────────────────────────────────────────────────
+ *
+ * THE SIGNATURE.
+ *
+ * Two superimposed grids at a 1:5 ratio: fine ticks every 24px, and a heavier
+ * cross at every fifth intersection. This is the survey graticule — the
+ * reference lattice printed under a measured drawing, which exists so that
+ * anything drawn on top can be located rather than merely looked at.
+ *
+ * It earns its place on three counts, and would not be here on fewer:
+ *
+ *   It reports scale honestly. The lattice scales with the camera, so its
+ *   spacing IS the zoom level, continuously and without a readout. Zooming
+ *   out visibly compresses the mesh. A person can see how far out they are
+ *   instead of being told.
+ *
+ *   It gives the plane an origin. A featureless field offers nothing to be
+ *   displaced against, so panning reads as the content moving. Against a
+ *   lattice, panning reads as the viewer moving — which is what is actually
+ *   happening, and it is the difference between a map and a canvas.
+ *
+ *   It states the medium. Before reading a single label, the surface says
+ *   "this is a measured drawing." That claim is true, and Cartograph's whole
+ *   argument rests on it being believed.
+ *
+ * Both layers are at very low contrast against the paper — below text
+ * threshold on purpose. The graticule is the one thing here allowed to be
+ * decorative-adjacent, and it pays for that by being nearly invisible until
+ * looked for: present enough to locate against, never competing with a label.
+ * If it were legible it would be noise; at this weight it is texture.
+ */
+.react-flow__background { background: var(--paper); }
 
-/* ─── Active Filter Banner ─── */
-.filter-banner { display: flex; align-items: center; gap: .6rem; padding: .5rem .8rem; background: #eef0ff; border-radius: 8px; font-size: .78rem; color: #2438bc; border: 1px solid #c7cef7; }
-.filter-banner-label { font-weight: 600; }
-.filter-banner-name { font-weight: 400; color: #3851e8; }
-.filter-banner-clear { margin-left: auto; padding: .22rem .55rem; background: #fff; border: 1px solid #c7cef7; border-radius: 5px; font-size: .72rem; font-weight: 600; color: #3851e8; cursor: pointer; transition: background var(--transition-fast), border-color var(--transition-fast); }
-.filter-banner-clear:hover { background: #edf0ff; border-color: #3851e8; }
+/* ─── Context Cluster ──────────────────────────────────────────────────
+ *
+ * Where you are, over the bottom-left of the map. Small and low-contrast:
+ * it answers a question that is asked often but briefly, so it should be
+ * findable without competing with the structure it describes.
+ */
+.context-cluster {
+  position: absolute;
+  bottom: var(--space-4);
+  left: var(--space-4);
+  z-index: 6;
+  max-width: min(46ch, calc(100% - var(--space-6)));
+  padding: var(--space-3);
+  /* The plate's legend block. Opaque, not translucent: a legend that lets the
+   * drawing show through it is harder to read than one that does not, and
+   * blur is an effect rather than a statement. This sits ON the map and says
+   * so plainly. */
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-flat);
+}
+.context-region {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--type-mono);
+  font-size: var(--text-small);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-hint {
+  display: block;
+  margin-top: 1px;
+  color: var(--ink-faint);
+  font-size: var(--text-caption);
+}
+/* The legend's internal rule, separating "where you are" from the navigation
+ * beneath it. */
+.context-cluster .breadcrumb-nav {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--rule);
+}
 
-/* ─── Detail Panel ─── */
-.detail-panel { position: fixed; z-index: 10; top: 1rem; right: 1rem; bottom: 1rem; width: min(var(--panel-width), calc(100vw - 2rem)); padding: 1.3rem; overflow: auto; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 20px 65px rgba(24,32,51,.2); transform: translateX(0); transition: transform var(--transition-normal), opacity var(--transition-normal); }
-.detail-panel.is-entering { animation: panelSlideIn var(--transition-normal) ease forwards; }
+/* ─── The Trail ────────────────────────────────────────────────────────
+ *
+ * What this investigation has examined, in the order things last mattered.
+ * Sits below the breadcrumb because it answers a different question: the
+ * breadcrumb says where you are, the trail says how you got here.
+ *
+ * Rendered quietly. It is a memory aid consulted occasionally, not a
+ * navigation surface competing with the map — so it stays small and
+ * low-contrast until pointed at. */
+.trail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--rule);
+}
+.trail-step {
+  max-width: 12ch;
+  padding: 0 var(--space-1);
+  overflow: hidden;
+  color: var(--ink-faint);
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trail-step:hover { color: var(--focus-deep); }
+/* Where you are now, in a path of where you have been. */
+.trail-step.is-current { color: var(--ink); font-weight: 500; }
+/* A separator drawn in CSS rather than markup: it is punctuation between
+ * steps, not content, and should never be selectable or read aloud.
+ *
+ * A rule rather than an arrowhead. The trail is a sequence in time, and a
+ * chevron would borrow the breadcrumb's containment vocabulary for something
+ * that is not containment — the same shape meaning two things is exactly the
+ * Perceptual Debt the visual language document warns about. */
+.trail-step + .trail-step::before {
+  content: "·";
+  margin-right: var(--space-1);
+  color: var(--rule-strong);
+}
+
+/* ─── Active Lens Indicator ──────────────────────────────────────────────
+ *
+ * A lens changes what the map emphasises, so something must say the map is
+ * currently being read through one — otherwise dimmed nodes look like a
+ * property of the repository rather than of the question being asked.
+ *
+ * It takes the accent, because an active lens IS a held question. Same
+ * vocabulary as a selected node and an open control: wash ground, accent
+ * hairline, deep ink. Learning it once covers all three. */
+.lens-active-bar {
+  position: absolute;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: calc(100% - var(--space-6));
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  color: var(--focus-deep);
+  background: var(--focus-wash);
+  border: 1px solid var(--focus);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption);
+  box-shadow: var(--shadow-flat);
+}
+.lens-active-clear {
+  padding: 0 var(--space-2);
+  color: var(--focus-deep);
+  background: var(--surface);
+  border: 1px solid var(--focus);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-micro);
+  font-weight: 500;
+}
+.lens-active-clear:hover { color: var(--surface); background: var(--focus-deep); }
+
+/* ─── Architecture Node ────────────────────────────────────────────────────
+ *
+ * A plate on the table. White — the only white in the map — with a hairline
+ * edge and a contact shadow so tight it reads as resting rather than
+ * floating. The map's job is to be a ground; the node's job is to be an
+ * object on it, and that difference is carried by surface rather than by
+ * ornament.
+ *
+ * Radius is the control value, not the plate value. A tighter corner reads as
+ * a cut edge — something trimmed to size — where a generous one reads as a
+ * soft UI card. It is the cheapest legible difference between "measured
+ * drawing" and "dashboard".
+ */
+/* Immediate — every state this node can be in.
+ *
+ * Emphasis and recession carry no transition at all. Hover, selection,
+ * neighbour warming and lens dimming are all the same act: they report which
+ * things are relevant right now, and a report that arrives 180ms after the
+ * question reads as lag rather than as care.
+ *
+ * The important consequence is consistency. Dimming reaches this node from
+ * three different directions — pointing at another node, selecting one, or
+ * toggling a lens — and all three previously animated at 180ms while the
+ * border and lift they arrived with animated at 150ms. One change, two
+ * speeds, in the same frame. Removing the transition entirely makes the
+ * three paths indistinguishable, which is what they are. */
+/* The card fills its allocation, and is free to exceed it.
+ *
+ * `height: 100%` was the second half of a regression worth recording. The
+ * layout allocates each node a pixel box, React Flow stamps that box onto the
+ * node's wrapper, and this rule sized the card against it — so when Phase 8's
+ * typography grew every row and the allocation stayed where it had been
+ * calibrated, the card could not grow to meet its contents. The overflow was
+ * not clipped; it was painted outside the border. A file node's path sat below
+ * the bottom edge, on every file node in the map.
+ *
+ * min-height keeps the card filling its allocation, which is what makes a row
+ * of nodes read as one row. Leaving height auto means the allocation is a
+ * floor rather than a cap: the height now comes from lib/workspace/nodeMetrics,
+ * derived from this file's own type scale, and if a row is ever added without
+ * updating that model the result is a card slightly taller than its neighbours
+ * — visible, correctable, and still a card containing its own text. */
+.architecture-node { width: 100%; min-height: 100%; padding: var(--space-3); color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-control); box-shadow: var(--shadow-flat); }
+/* ─── Focus Contract ───────────────────────────────────────────────────
+ *
+ * One visual language, three persistence levels:
+ *
+ *   at rest    everything fully legible, nothing emphasised
+ *   hover      subject lifts, its direct relations warm, the rest recedes
+ *              — reversible on exit, no state change
+ *   selected   the same treatment, held without the pointer, plus a ring
+ *              that says "this is being kept"
+ *
+ * Hover and selection deliberately share border colour and elevation. They
+ * are the same act at different durations, and teaching them as two separate
+ * vocabularies would mean learning twice what should be learned once.
+ *
+ * TARGETING: the state classes are written onto React Flow's node object,
+ * which puts them on `.react-flow__node` — the positioning wrapper. Every
+ * rule below therefore matches the wrapper and styles the inner
+ * `.architecture-node` through it. Rules written directly against
+ * `.architecture-node.is-*` never matched anything and were silently inert.
+ *
+ * Stacking sits on the wrapper itself: sibling order among nodes is decided
+ * there, so a z-index on the inner element could not lift a node above its
+ * neighbours.
+ */
+
+/* Subject — pointed at.
+ *
+ * Accent edge and a lift. The border thickens by no pixels; only its colour
+ * changes, so nothing reflows and no label shifts under the pointer. */
+.architecture-node:hover,
+.react-flow__node.is-hovered .architecture-node {
+  border-color: var(--focus);
+  box-shadow: var(--shadow-raised);
+  transform: translateY(-1px);
+}
+
+/* Subject — held. Same family as hover; the ring carries persistence.
+ *
+ * The ring is the accent at full strength rather than a soft halo: this is
+ * the single most important "you asked about this" signal in the product, and
+ * a blurred glow would state it less definitely than the fact deserves. */
+.react-flow__node.is-selected .architecture-node {
+  border-color: var(--focus);
+  background: var(--focus-wash);
+  box-shadow: 0 0 0 2px var(--focus), var(--shadow-raised);
+  transform: translateY(-1px);
+}
+
+/* Direct relations of the subject. Softer than the subject, warmer than
+ * rest — the same treatment whether reached by hover or by selection.
+ *
+ * A neighbour gets the accent edge WITHOUT the ring or the lift. Same hue,
+ * less of it: the relationship to the subject is visible in how much accent
+ * an object carries, which is one scale rather than two vocabularies. */
+.react-flow__node.is-neighbor .architecture-node {
+  border-color: var(--focus);
+  background: var(--surface);
+}
+
+/* Receded — currently less relevant. NOT gone.
+ *
+ * `pointer-events: none` was removed deliberately: de-emphasis must never
+ * remove interactivity. A person has to be able to reach past the current
+ * focus without dismissing it first.
+ *
+ * Opacity is .45, not the previous .18. At .18 a node was effectively
+ * invisible, which made "still clickable" a hollow guarantee — you cannot
+ * aim at what you cannot see. .45 reads as clearly secondary while staying
+ * legible and targetable.
+ *
+ * Confidence survives recession because it never depended on opacity: a
+ * dashed border stays dashed at any alpha, and grayscale cannot flatten a
+ * distinction that was never carried by hue alone. */
+.react-flow__node.is-dimmed .architecture-node {
+  opacity: .45;
+  filter: grayscale(24%);
+}
+
+/* Stacking — wrapper only.
+ *
+ * !important because React Flow writes `z-index: 0` inline on every node
+ * wrapper, and an inline declaration outranks any stylesheet rule. Without
+ * this a lifted node still renders beneath its neighbours, so the lift reads
+ * as a glitch rather than as emphasis. Same reason the file's other React
+ * Flow overrides carry it. */
+.react-flow__node.is-selected { z-index: 4 !important; }
+.react-flow__node.is-hovered { z-index: 4 !important; }
+.react-flow__node.is-neighbor { z-index: 3 !important; }
+
+/* The arrival pulse is gone.
+ *
+ * It was a 700ms expanding ring drawn on a node after the camera landed on
+ * it, and it arrived here with the note "whether an arrival deserves a pulse
+ * at all is a motion question, deferred." This is that question. The answer
+ * is no.
+ *
+ * Everything the pulse communicated was already communicated, earlier and
+ * permanently, by the selection ring: navigating to a node selects it, so the
+ * ring appears as the camera begins moving and then stays. The pulse restated
+ * that for 700ms and removed itself — a second, louder announcement of a fact
+ * already on screen. Decorative emphasis, and attention spent on the
+ * interface rather than the repository.
+ *
+ * It also belonged to no tier. 700ms is longer than a structural change, for
+ * an event with none of a structural change's significance — and the JS timer
+ * clearing the class ran 800ms, so one effect carried two durations that
+ * disagreed with each other. */
+/* The plate's three registers, in reading order:
+ *
+ *   kicker   what KIND of thing this is — mono, micro, tracked, uppercase.
+ *            The survey stamp again, identical to every other structural
+ *            label in the product.
+ *   name     the thing itself. Sans, because a filename read as a word is
+ *            read faster than one read as a string.
+ *   detail   the path or count. Mono, because it is machine text a person
+ *            compares rather than reads.
+ *
+ * Two faces doing exactly two jobs: prose is prose, data is data, and the
+ * distinction never has to be explained. */
+.architecture-node .node-kicker {
+  margin-bottom: var(--space-1);
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+}
+.architecture-node strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-body);
+  font-weight: 600;
+  letter-spacing: var(--track-title);
+}
+.architecture-node span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Connection points. Small, square, and the ink colour rather than the
+ * accent: a handle marks where a dependency attaches, which is structure, and
+ * the accent is reserved for what the reader asked about. Square because a
+ * dot reads as a decorative bullet where a tick reads as a registration
+ * mark. */
+.node-handle {
+  width: 5px !important;
+  height: 5px !important;
+  background: var(--rule-strong) !important;
+  border: 0 !important;
+  border-radius: 1px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+/* The subject's own attachment points take the accent, so a selected node's
+ * connections are visible as belonging to it. */
+.react-flow__node.is-selected .node-handle,
+.react-flow__node.is-hovered .node-handle { background: var(--focus) !important; }
+
+/* ─── Boundary Stub ────────────────────────────────────────────────────
+ *
+ * A neighbouring region drawn inside another region's file view, standing
+ * for the far end of a cross-boundary dependency.
+ *
+ * This is NOT a confidence state and must not read as one. The target is
+ * fully known and verified — it is simply not currently drawn. So the
+ * treatment deliberately avoids every channel confidence uses: the border
+ * stays solid (dashed means reduced evidence), the ink stays full (faded ink
+ * means uncertainty), and no confidence marker appears.
+ *
+ * What it does say is "this is not one of the files here": a tinted ground
+ * and inset depth, so it reads as a surface set back from the plane the file
+ * nodes sit on rather than a peer among them. It remains fully interactive —
+ * clicking navigates into the region.
+ */
+.architecture-node.is-boundary {
+  background: var(--well);
+  border-color: var(--rule);
+  border-style: solid;
+  box-shadow: inset 0 1px 2px rgba(23, 27, 33, .05);
+}
+.architecture-node.is-boundary .node-kicker { color: var(--ink-faint); }
+.architecture-node.is-boundary:hover {
+  background: var(--surface);
+  border-color: var(--focus);
+  box-shadow: var(--shadow-raised);
+}
+
+/* ─── Confidence Encoding ───────────────────────────────────────────────
+ *
+ * Five states, each carried on at least two perceptual channels. Never
+ * colour alone — a person who cannot distinguish these hues must still be
+ * able to read confidence from form and ink.
+ *
+ *   verified   full ink,    solid border,    NO marker
+ *   derived    full ink,    solid border,    NO marker (lineage in inspector)
+ *   heuristic  reduced ink, dashed border,   quiet marker
+ *   unknown    lowest ink,  open border,     explicit marker
+ *   assisted   never geometry — see .assisted-note
+ *
+ * Verified and derived are deliberately identical here. Both are
+ * deterministic and equally reliable; granting them different visual
+ * authority would misrepresent that. What differs is lineage, which the
+ * inspector offers on selection.
+ *
+ * Verified carries no marker at all. If the overwhelmingly common case were
+ * marked, the mark would become wallpaper and stop meaning anything. Absence
+ * of a marker IS the signal for full confidence; marks are spent only where
+ * confidence departs from it.
+ *
+ * Uncertainty is quieter, not louder. Reduced evidence gets reduced ink —
+ * the inverse of the usual reflex to make doubt alarming. Nothing here
+ * should pull the eye harder than a verified fact does.
+ */
+
+/* Heuristic — facts salvaged from a partial parse.
+ *
+ * Three channels, none of them hue: the border becomes dashed (form), the ink
+ * drops one step on the ramp (weight), and a word marker names the state
+ * (language). Printing this plate in greyscale loses nothing. */
+.architecture-node.confidence-heuristic {
+  border-style: dashed;
+  border-color: var(--rule);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+.architecture-node.confidence-heuristic strong { font-weight: 500; }
+.architecture-node.confidence-heuristic:hover { border-color: var(--focus); }
+
+/* Unknown — the import exists; its target could not be determined.
+ * The trailing border is removed so the shape does not close: the node
+ * reads as continuing into something we cannot show. */
+.architecture-node.confidence-unknown {
+  border-style: dashed;
+  border-right: none;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-faint);
+}
+/* Set in mono, at reading weight rather than emphasis weight. An unresolved
+ * specifier is the literal string found in the source and nothing more — it
+ * has not been resolved to a file, so it is quoted rather than named. */
+.architecture-node.confidence-unknown strong {
+  font-weight: 400;
+  font-family: var(--type-mono);
+  font-size: var(--text-small);
+  letter-spacing: 0;
+}
+.architecture-node.confidence-unknown:hover {
+  border-color: var(--rule-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+/* The marker. Quiet by construction: small, lowercase, muted, no fill.
+ * It names the state in words rather than relying on shape recognition,
+ * so the encoding is learnable without a legend. */
+.confidence-marker {
+  /* Block, not inline-block.
+   *
+   * The marker is the last of several stacked rows and every sibling is a
+   * block, so it occupies its own row either way. As an inline-block it also
+   * sat in a line box governed by the CARD's strut — 21px, set by the name's
+   * body size — and baseline alignment made the row 17.4px rather than the
+   * 16.5px of its own line. The box model in lib/workspace/nodeMetrics could
+   * not see that, so a marked node was allocated ~1px less than it drew.
+   *
+   * inline-block was left over from the pre-Phase-8 marker, which was an
+   * amber chip with padding and a fill and genuinely needed to hug its
+   * text. Phase 8 dropped both; only the display mode stayed behind. */
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.confidence-marker::before { content: "· "; }
+
+/* Folder aggregate — how many contained files have reduced confidence.
+ * The region itself stays 'derived'; this reports its contents, not itself. */
+.confidence-contains {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+}
+
+/* ─── Assisted — generated interpretation ───────────────────────────────
+ *
+ * Nothing produces this yet. The slot exists now so the first AI feature
+ * cannot be retrofitted into looking like a fact under delivery pressure.
+ *
+ * Deliberately unlike every fact-bearing surface in the product, on four
+ * channels at once: the only cool hue in a warm palette, its own wash, a left
+ * rule where facts have full borders, and italic serif where the product
+ * speaks in Plex. Any one of these could be missed; four cannot.
+ *
+ * THE SERIF IS THE EXCEPTION TO "TWO TYPEFACES", AND IT IS DELIBERATE. The
+ * two-face rule governs Cartograph's own voice. Generated reasoning is not
+ * Cartograph's voice — it is quoted material from another source, and setting
+ * it in the product's own faces would be the typographic equivalent of
+ * removing the quotation marks. A reader must be able to tell, at a glance
+ * and without reading a label, that this text was not measured. Serif italic
+ * is the oldest convention available for exactly that.
+ *
+ * It is not a node style and must never become one — GeometryConfidence
+ * excludes 'assisted' at the type level so the compiler enforces that.
+ */
+.assisted-note {
+  margin-top: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  background: var(--assisted-wash);
+  border-left: 2px solid var(--assisted);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+.assisted-note .assisted-label {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--assisted);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.assisted-note p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-style: italic;
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+/* ─── Detail Panel ─────────────────────────────────────────────────────
+ *
+ * Overlays the right edge of the map. It does NOT resize the map: the
+ * camera offsets instead, so node world-positions never change and nothing
+ * has to be re-recognised after it opens.
+ *
+ * This replaces a coupled handshake in which the canvas element shrank by
+ * the panel's width while a transitionend listener re-centred the camera,
+ * with a hardcoded pixel fallback when no transition fired. Two systems
+ * reflowing against each other — and on narrow viewports the canvas
+ * computed a negative width.
+ */
+/* Connective.
+ *
+ * The panel enters from the edge it will occupy, over the same duration the
+ * camera takes to recentre. The two are one movement: the map yields space on
+ * the right and the evidence arrives into it, and a person can see that the
+ * panel came from the selection rather than appearing on top of it.
+ *
+ * Sharing the duration is what makes that legible. When the panel animated at
+ * 220ms and the camera at 250ms, the two halves of one act finished 30ms
+ * apart — not enough to name, enough to feel unresolved. */
+.detail-panel {
+  position: fixed;
+  z-index: 10;
+  top: calc(var(--rail-height) + var(--space-4));
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: min(var(--panel-width), calc(100vw - var(--space-6)));
+  padding: var(--space-5);
+  overflow: auto;
+  background: var(--surface);
+  /* The stronger hairline, not the ordinary one.
+   *
+   * Found in Phase 8's rendered verification: on the ivory ground the panel's
+   * cast shadow reads far more weakly than it did against the previous cool
+   * grey — warm-on-warm gives a soft shadow very little to sit against — and
+   * the panel lost its edge against the map. Elevation on this palette has to
+   * be carried by the border, with the shadow supporting rather than leading. */
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-over);
+  transform: translateX(0);
+}
+.detail-panel.is-entering { animation: panelSlideIn var(--motion-connective) var(--motion-ease) forwards; }
 @keyframes panelSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-.detail-panel-heading { display: flex; gap: .75rem; justify-content: space-between; align-items: flex-start; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
-.detail-panel h2 { max-width: 290px; margin: 0; overflow-wrap: anywhere; font-size: 1.08rem; line-height: 1.35; }
-.icon-button { width: 30px; height: 30px; color: var(--muted); background: #f3f5f9; border: 0; border-radius: 7px; font-size: 1.35rem; transition: background var(--transition-fast), color var(--transition-fast); }
-.icon-button:hover { background: #e6e9f0; color: var(--ink); }
+.detail-panel-heading {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--rule);
+}
+/* The subject, in mono. A path is the file's identity, and identity is
+ * quoted verbatim rather than typeset as prose. */
+.detail-panel h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-family: var(--type-mono);
+  font-size: var(--text-small);
+  font-weight: 500;
+  line-height: 1.45;
+}
+.icon-button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  color: var(--ink-faint);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+}
+.icon-button:hover { color: var(--ink); background: var(--well); border-color: var(--rule); }
 
 /* ─── Detail Panel: Quick Actions ─── */
-.quick-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin: .75rem 0; }
-.quick-action { display: inline-flex; align-items: center; gap: .3rem; padding: .32rem .55rem; color: #4a5575; background: #f3f5f9; border: 1px solid transparent; border-radius: 6px; font-size: .7rem; font-weight: 600; transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast); }
-.quick-action:hover { background: #edf0ff; border-color: #d5daff; color: var(--blue); }
-.quick-action.is-copied { color: #2a7d34; background: #edf9ee; }
+.quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; }
+.quick-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  font-size: var(--text-caption);
+  font-weight: 500;
+}
+.quick-action:hover { color: var(--focus-deep); border-color: var(--focus); background: var(--focus-wash); }
 
-/* ─── Detail Panel: File Stats ─── */
-.file-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: 1rem 0 1.25rem; }
+/* ─── Detail Panel: File Stats ─────────────────────────────────────────
+ *
+ * The measured facts, laid out as a survey record: label above, figure below,
+ * figures in tabular mono so the column aligns and can be compared down. */
+.file-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  margin: var(--space-4) 0 var(--space-5);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
 .file-stats div { min-width: 0; }
-.file-stats dt { color: var(--muted); font-size: .68rem; }
-.file-stats dd { margin: .2rem 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; font-weight: 700; }
-.detail-panel section { margin-top: 1.2rem; }
-.detail-panel h3 { display: flex; justify-content: space-between; margin: 0 0 .55rem; font-size: .83rem; }
-.detail-panel h3 span { color: var(--blue); }
-.detail-panel ul { display: grid; gap: .36rem; margin: 0; padding: 0; list-style: none; }
+.file-stats dt {
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.file-stats dd {
+  margin: var(--space-1) 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--type-mono);
+  font-size: var(--text-body);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.detail-panel section { margin-top: var(--space-5); }
+/* Section heading — the survey stamp, once more. Its count sits right-aligned
+ * as a figure rather than as accent-coloured text: a count is a measurement,
+ * and rust is reserved for what the reader asked about. */
+.detail-panel h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.detail-panel h3 span {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.detail-panel ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .detail-panel li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── Detail Panel: Interactive File Refs ─── */
-.file-ref { display: block; width: 100%; padding: .42rem .5rem; background: #f6f8fc; border: 1px solid transparent; border-radius: 5px; text-align: left; cursor: pointer; font: inherit; transition: background var(--transition-fast), border-color var(--transition-fast); }
-.file-ref:hover { background: #edf0ff; border-color: #d5daff; }
-.file-ref code { color: #3e4a64; font-size: .73rem; pointer-events: none; }
-.empty-copy { margin: 0; color: var(--muted); font-size: .82rem; }
+.file-ref {
+  display: block;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  background: var(--well);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.file-ref:hover { background: var(--focus-wash); border-color: var(--focus); }
+.file-ref code { color: var(--ink-muted); font-size: var(--text-caption); pointer-events: none; }
+.file-ref:hover code { color: var(--focus-deep); }
+.empty-copy { margin: 0; color: var(--ink-faint); font-size: var(--text-caption); }
 
-/* ─── Confirm Dialog ─── */
-.dialog-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(24,32,51,.45); animation: backdropFadeIn var(--transition-fast) ease forwards; }
+/* ─── Detail Panel: Evidence ───────────────────────────────────────────
+ * Confidence and unresolved targets. Same discipline as the map: form and
+ * ink carry the state, wording states cause without assigning blame, and
+ * a fully verified file says nothing at all here. */
+.file-ref.is-unresolved {
+  background: transparent;
+  border: 1px dashed var(--rule-strong);
+  border-right: none;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+.file-ref.is-unresolved code { color: var(--ink-faint); }
+.evidence-copy { margin: 0 0 var(--space-2); color: var(--ink-muted); font-size: var(--text-caption); line-height: 1.5; }
+.evidence-section h3 { color: var(--ink-faint); }
+.evidence-reasons { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.evidence-reasons li {
+  padding: var(--space-2);
+  color: var(--ink-muted);
+  background: transparent;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-control);
+  font-size: var(--text-caption);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+/* ─── Detail Panel: Provenance ─────────────────────────────────────────
+ *
+ * WHERE FOREST GREEN LIVES.
+ *
+ * This is the surface a person reaches when they ask "how do you know that?"
+ * — and it is the only place in the product where green appears, because it
+ * is the only place where the answer is the subject rather than the finding.
+ *
+ * It is deliberately NOT on map geometry. Phase 1 established that marking
+ * the overwhelmingly common case makes the mark wallpaper, so the map still
+ * reports full confidence by the absence of any mark. Green here is not a
+ * badge meaning "trust this"; it is the colour of the evidence trail itself,
+ * shown only once someone has asked to see it.
+ *
+ * The left rule mirrors the assisted surface's construction exactly, in the
+ * opposing hue. Two quotations from two sources, formatted alike so the
+ * contrast between them is the hue and nothing else: warm green for what was
+ * measured, cool purple for what was generated. */
+.provenance {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--forest-wash);
+  border-left: 2px solid var(--forest);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+.provenance-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--forest);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.provenance p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+/* ─── Detail Panel: Cycle Membership ───────────────────────────────────
+ *
+ * AMBER, and the only place it appears outside the map node itself.
+ *
+ * A cycle is structurally provable, which is why it kept its name when "god
+ * module" and "orphan" lost theirs. Marking it here answers "is this file
+ * part of one?" at the moment a person is looking at that file.
+ *
+ * The wording states the structure without judging it. A cycle may be
+ * deliberate; Cartograph's job is to make it findable, not to call it a
+ * fault — which is also why this colour never reaches the observations
+ * menu. */
+.cycle-note {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--amber-wash);
+  border-left: 2px solid var(--amber);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+.cycle-note-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--amber);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.cycle-note p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+.cycle-note code {
+  color: var(--amber);
+  font-size: var(--text-caption);
+}
+
+/* ─── Confirm Dialog ───────────────────────────────────────────────────
+ *
+ * Above and blocking. Rare by construction — a dialog interrupts, and
+ * interruption has to be earned by the action being destructive or
+ * unrecoverable. */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  /* The ink's own colour at low alpha, so the veil reads as the page dimming
+   * rather than as a grey sheet dropped over it. */
+  background: rgba(35, 32, 25, .38);
+  animation: backdropFadeIn var(--motion-connective) var(--motion-ease) forwards;
+}
 @keyframes backdropFadeIn { from { opacity: 0; } to { opacity: 1; } }
-.confirm-dialog { width: min(400px, calc(100vw - 2rem)); padding: 1.5rem; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 20px 65px rgba(24,32,51,.25); animation: dialogScaleIn var(--transition-normal) ease forwards; }
-@keyframes dialogScaleIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.confirm-dialog h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
-.confirm-dialog p { margin: 0 0 1.25rem; color: var(--muted); font-size: .9rem; line-height: 1.5; }
-.confirm-dialog-actions { display: flex; gap: .5rem; justify-content: flex-end; }
-.confirm-dialog-actions button { min-height: 38px; padding: .5rem 1rem; border-radius: 8px; font-weight: 700; font-size: .85rem; }
-.confirm-dialog .button-danger { color: white; background: #d92d20; border: 0; transition: background var(--transition-fast); }
-.confirm-dialog .button-danger:hover { background: #b42318; }
+.confirm-dialog {
+  width: min(400px, calc(100vw - var(--space-6)));
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-over);
+  animation: dialogScaleIn var(--motion-connective) var(--motion-ease) forwards;
+}
+@keyframes dialogScaleIn { from { transform: scale(.98); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.confirm-dialog h2 { margin: 0 0 var(--space-2); font-size: var(--text-title); letter-spacing: var(--track-title); }
+.confirm-dialog p { margin: 0 0 var(--space-5); color: var(--ink-muted); font-size: var(--text-body); line-height: 1.5; }
+.confirm-dialog-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+.confirm-dialog-actions button {
+  min-height: 34px;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  font-weight: 500;
+  font-size: var(--text-small);
+}
+.confirm-dialog .button-danger { color: var(--surface); background: var(--danger); border: 0; }
+.confirm-dialog .button-danger:hover { background: #7A1A1A; }
 
-/* ─── Search Overlay ─── */
-.search-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: start center; padding-top: min(20vh, 160px); background: rgba(24,32,51,.4); animation: backdropFadeIn var(--transition-fast) ease forwards; }
-.search-card { width: min(540px, calc(100vw - 2rem)); background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 20px 65px rgba(24,32,51,.25); animation: dialogScaleIn 200ms ease forwards; overflow: hidden; }
-.search-input-wrap { display: flex; align-items: center; gap: .6rem; padding: .9rem 1.1rem; border-bottom: 1px solid var(--line); }
-.search-input-wrap .search-icon { color: var(--muted); font-size: 1.1rem; flex-shrink: 0; }
-.search-input { flex: 1; border: 0; outline: none; font-size: .95rem; color: var(--ink); background: transparent; }
-.search-input::placeholder { color: #a0a8be; }
-.search-kbd { padding: .15rem .4rem; color: #78829a; background: #f3f5f9; border-radius: 4px; font-size: .68rem; font-family: monospace; }
+/* ─── Search Overlay ───────────────────────────────────────────────────
+ *
+ * The gazetteer. A chart's index of place names, opened over the drawing:
+ * you type a name, and it tells you where on the sheet to look. */
+.search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: start center;
+  padding-top: min(18vh, 150px);
+  background: rgba(35, 32, 25, .34);
+  animation: backdropFadeIn var(--motion-connective) var(--motion-ease) forwards;
+}
+.search-card {
+  width: min(540px, calc(100vw - var(--space-6)));
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-over);
+  animation: dialogScaleIn var(--motion-connective) var(--motion-ease) forwards;
+  overflow: hidden;
+}
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--rule);
+}
+.search-input-wrap .search-icon { display: grid; place-items: center; color: var(--ink-faint); flex-shrink: 0; }
+/* Mono, because what is typed here is matched against paths character by
+ * character — the query and the results should be set in the same face. */
+.search-input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  font-family: var(--type-mono);
+  font-size: var(--text-body);
+  color: var(--ink);
+  background: transparent;
+}
+.search-input::placeholder { color: var(--ink-faint); font-family: var(--type-sans); }
+.search-kbd {
+  flex-shrink: 0;
+  padding: 0 var(--space-1);
+  color: var(--ink-faint);
+  background: var(--well);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-size: var(--text-micro);
+  font-family: var(--type-mono);
+}
 .search-results { max-height: 320px; overflow-y: auto; }
-.search-result { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .7rem 1.1rem; background: none; border: none; text-align: left; cursor: pointer; font: inherit; transition: background var(--transition-fast); }
-.search-result:hover, .search-result.is-active { background: #f0f2ff; }
-.search-result-icon { color: var(--muted); font-size: .85rem; flex-shrink: 0; }
-.search-result-path { font-size: .82rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.search-result-folder { font-size: .7rem; color: var(--muted); margin-left: auto; flex-shrink: 0; }
-.search-empty { padding: 1.5rem; text-align: center; color: var(--muted); font-size: .85rem; }
-.search-count { padding: .4rem 1.1rem; color: var(--muted); font-size: .72rem; border-top: 1px solid var(--line); }
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+/* The cursor's row. A rust rule down the left edge rather than a filled
+ * ground: the mark says "this one" at the same weight a selected node's
+ * border does, without flooding the row with colour. */
+.search-result:hover,
+.search-result.is-active {
+  background: var(--focus-wash);
+  border-left-color: var(--focus);
+}
+.search-result-path {
+  font-family: var(--type-mono);
+  font-size: var(--text-small);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-result-folder {
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  color: var(--ink-faint);
+  margin-left: auto;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18ch;
+}
 
-/* ─── Zoom Controls ─── */
-.zoom-controls { position: absolute; bottom: 1rem; left: 1rem; z-index: 5; display: flex; align-items: center; gap: 0; background: #fff; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 5px 18px rgba(29,42,79,.14); overflow: hidden; }
-.zoom-btn { display: grid; place-items: center; width: 36px; height: 36px; background: #fff; border: none; border-right: 1px solid var(--line); color: #4a5575; font-size: 1rem; transition: background var(--transition-fast), color var(--transition-fast); }
+/* Matched characters.
+ *
+ * Shows WHY a result earned its place, so the ranking is checkable rather
+ * than asserted. Weight and colour only — no background fill, which at this
+ * size would read as a highlighter smear across the list.
+ *
+ * <mark> is reset because its default yellow ground belongs to prose
+ * annotation, not to structural search feedback. */
+.search-match {
+  background: none;
+  color: var(--focus-deep);
+  font-weight: 600;
+}
+
+/* A package result names itself as one. Without it a package row and a file
+ * row would look alike while meaning different things. */
+.search-result-kind {
+  flex-shrink: 0;
+  padding: 0 var(--space-1);
+  color: var(--ink-faint);
+  background: var(--well);
+  border-radius: 2px;
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.search-empty { padding: var(--space-5); text-align: center; color: var(--ink-faint); font-size: var(--text-small); }
+.search-count {
+  padding: var(--space-2) var(--space-4);
+  color: var(--ink-faint);
+  background: var(--well);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  border-top: 1px solid var(--rule);
+}
+
+/* ─── Zoom Controls ────────────────────────────────────────────────────
+ *
+ * The scale bar's controls, sitting on the plate beside the legend. Divided
+ * by hairlines rather than gaps: one instrument with three actions, not three
+ * separate buttons that happen to be adjacent. */
+.zoom-controls {
+  position: absolute;
+  bottom: var(--space-4);
+  /* Clears the context cluster, which is anchored bottom-left. */
+  right: var(--space-4);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-flat);
+  overflow: hidden;
+}
+.zoom-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--rule);
+  color: var(--ink-muted);
+}
 .zoom-btn:last-child { border-right: none; }
-.zoom-btn:hover { background: #f0f2ff; color: var(--blue); }
-.zoom-level { min-width: 44px; padding: 0 .4rem; text-align: center; font-size: .72rem; color: var(--muted); font-weight: 600; border-right: 1px solid var(--line); line-height: 36px; }
+.zoom-btn:hover { background: var(--focus-wash); color: var(--focus-deep); }
 
 /* ─── React Flow Overrides ─── */
 .react-flow__controls { display: none !important; }
-.react-flow__minimap { border-radius: 8px !important; border: 1px solid var(--line) !important; box-shadow: 0 4px 12px rgba(29,42,79,.08) !important; transition: box-shadow var(--transition-fast) !important; }
-.react-flow__minimap:hover { box-shadow: 0 6px 18px rgba(29,42,79,.14) !important; }
-.react-flow__edge-path { stroke: #97a4c2; transition: stroke var(--transition-fast), stroke-width var(--transition-fast), opacity var(--transition-fast); }
 
-/* ─── Keyboard Hints ─── */
-.kbd-hint { position: absolute; bottom: 1rem; right: 1rem; z-index: 5; padding: .4rem .6rem; color: var(--muted); background: rgba(255,255,255,.9); border: 1px solid var(--line); border-radius: 7px; font-size: .68rem; backdrop-filter: blur(4px); }
-.kbd-hint kbd { padding: .08rem .3rem; background: #f3f5f9; border-radius: 3px; font-family: monospace; font-size: .65rem; }
+/* Edges are drawn in ink, not in accent.
+ *
+ * A dependency is structure — it is part of the terrain being surveyed, not
+ * something the reader asked about. Drawing the whole graph in accent would
+ * spend the one colour that means "this is your subject" on every line on the
+ * plate, after which it would mean nothing. The accent is applied to an edge
+ * only while it is connected to the current subject, and that is decided in
+ * DiagramView so it can be scaled against confidence rather than overwrite
+ * it. */
+.react-flow__edge-path { stroke: var(--rule-strong); }
+
+/* Edge confidence. Same rules as nodes: verified and derived are unmarked,
+ * reduced evidence is quieter, and form carries the distinction alongside ink.
+ *
+ * These edges are never animated. A moving dash would spend continuous
+ * attention on a static fact and imply activity that is not occurring. */
+.react-flow__edge.confidence-heuristic .react-flow__edge-path {
+  stroke: var(--rule);
+  stroke-dasharray: 5 3;
+}
+.react-flow__edge.confidence-unknown .react-flow__edge-path {
+  stroke: var(--rule);
+  stroke-dasharray: 2 4;
+  stroke-linecap: round;
+}
+/* No arrowhead on an unknown edge: an arrow asserts arrival at a target,
+ * and the whole point of this state is that the target is undetermined. */
+.react-flow__edge.confidence-unknown .react-flow__arrowhead,
+.react-flow__edge.confidence-unknown marker { display: none; }
+
+/* ─── Reduced Motion ───────────────────────────────────────────────────────
+ *
+ * Tiers 2 and 3 become instant. Nothing else changes: every final state is
+ * identical to the one a full-motion transition would have arrived at, so
+ * this is the same interface reached without traversal — not a reduced one.
+ *
+ * WHY IT IS DONE HERE, IN TOKENS: overriding the custom properties means
+ * `lib/workspace/motion.ts` inherits the preference automatically, because it
+ * reads these same properties for the camera. There is no second
+ * reduced-motion branch in the JS, and therefore no way for the stylesheet and
+ * the camera to disagree about whether the preference is in effect. Adding a
+ * new animation to this file cannot forget to honour it.
+ *
+ * ORIENTATION IS PRESERVED BY OTHER MEANS. This is the part that makes the
+ * removal safe rather than merely compliant:
+ *
+ *   · Node world-positions never move. The camera translates; the map does not
+ *     re-lay-out. So a jump cannot cost recognition — every object is exactly
+ *     where it was, and the only thing that changed is which part is framed.
+ *   · The selection ring is a persistent state, not an animation. It marks
+ *     what was navigated to and stays there.
+ *   · The breadcrumb states hierarchy position, the trail states the path of
+ *     inquiry, and the context cluster names the current region. All three are
+ *     static text — they answer "where am I" without motion having to.
+ *   · The address carries the position, so it survives reload regardless.
+ *
+ * Continuous indicators stop entirely rather than run at zero duration: a
+ * zero-length infinite animation is a degenerate loop, and its honest
+ * substitute is a static element that still says "work is in progress".
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-connective: 0ms;
+    --motion-structural: 0ms;
+    --motion-structural-leg: 0ms;
+  }
+
+  /* Loaders hold still. The skeleton and the pulse remain visible and keep
+   * meaning "not finished yet"; they simply stop moving. */
+  .skeleton-title,
+  .skeleton-stat,
+  .skeleton-node,
+  .skeleton-anomaly,
+  .progress-pulse,
+  .progress-step.is-active .progress-step-icon,
+  .is-dragging .file-icon {
+    animation: none;
+  }
+
+  /* The panel arrives already in place. `is-entering` animates from
+   * translateX(100%), and a 0ms animation would land it correctly but the
+   * declaration is removed rather than shortened so there is no frame in
+   * which it exists off-screen. */
+  .detail-panel.is-entering {
+    animation: none;
+  }
+}
 
 /* ─── Not Found ─── */
-.not-found { max-width: 640px; margin: 15vh auto; padding: 2rem; text-align: center; }
-.not-found h1 { margin-bottom: .75rem; font-size: clamp(2.6rem, 7vw, 5rem); letter-spacing: -.06em; }
-.not-found p:not(.eyebrow) { margin-bottom: 2rem; color: var(--muted); }
+.not-found { max-width: 640px; margin: 15vh auto; padding: var(--space-6); }
+.not-found h1 { margin-bottom: var(--space-3); font-size: var(--text-display); letter-spacing: var(--track-display); line-height: 1.02; }
+.not-found p:not(.eyebrow) { margin-bottom: var(--space-6); color: var(--ink-muted); }
 
 /* ─── Responsive ─── */
 @media (max-width: 760px) {
-  .landing-shell { padding-inline: 1.25rem; }
-  .hero { padding: 5.5rem 0 3.5rem; }
-  .principles, .anomalies { grid-template-columns: 1fr; }
-  .principles article, .principles article:first-child { padding: 1.3rem 0; border-right: 0; border-bottom: 1px solid var(--line); }
-  .diagram-header { min-height: 66px; }
-  .diagram-meta > span { display: none; }
-  .diagram-title-row { align-items: flex-start; flex-direction: column; gap: 1.1rem; padding-top: 1.9rem; }
-  .summary-grid { width: 100%; }
-  .summary-grid-item { text-align: left; }
-  .canvas-card { min-height: 430px; height: 60vh; }
-  .anomaly-card p { white-space: normal; }
-  .search-card { width: calc(100vw - 1rem); }
-  .progress-stepper { gap: .3rem; }
+  .landing-shell { padding-inline: var(--space-5); }
+  .hero { padding: var(--space-7) 0 var(--space-6); }
+  .principles { grid-template-columns: 1fr; }
+  .principles article,
+  .principles article:first-child,
+  .principles article:last-child {
+    padding: var(--space-4) 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .principles article:last-child { border-bottom: 0; }
+
+  /* The specimen legend stacks to two columns rather than one: at four across
+   * the gloss text drops to two words per line, and at one across the figure
+   * loses its relationship to the rows keyed against it. */
+  .specimen-legend { grid-template-columns: repeat(2, 1fr); }
+  .legend-row:nth-child(2n) { border-right: 0; }
+  .legend-row:nth-child(-n+2) { border-bottom: 1px solid var(--rule); }
+
+  .search-card { width: calc(100vw - var(--space-4)); }
+  .progress-stepper { gap: var(--space-1); }
   .skeleton-anomalies { grid-template-columns: 1fr; }
-  .repo-context-bar { font-size: .72rem; }
   .upload-actions { flex-direction: column; }
+
+  /* Rail, narrow. Things yield in order of how much they contribute to
+   * orientation: the size metadata goes first, then the product wordmark —
+   * its glyph stays, so the way home remains where it always was. The
+   * repository name never drops; it is what tells you where you are. */
+  .rail { gap: .6rem; padding: 0 .7rem; }
+  .rail-repo-meta { display: none; }
+  /* The wordmark's text is clipped rather than resized to zero: the glyph
+   * stays, so the way home remains exactly where it was. */
+  .rail-mark { max-width: 17px; overflow: hidden; gap: 0; }
+  .rail-button { padding: var(--space-1) var(--space-2); font-size: var(--text-caption); }
+  /* Search collapses to its icon: the affordance survives, its label does
+   * not. A person who can see the magnifier can still find search; the word
+   * was only ever there to make that easier. */
+  .rail-search { flex: 0 0 auto; max-width: none; padding: .38rem .45rem; }
+  .rail-search-label, .rail-search-kbd { display: none; }
+  .context-cluster { max-width: calc(100% - 1.5rem); bottom: .7rem; left: .7rem; }
 }

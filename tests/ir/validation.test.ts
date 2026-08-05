@@ -26,6 +26,7 @@ function validModuleRoot(overrides: Record<string, unknown> = {}) {
     rootPath: "",
     language: "typescript",
     manifestFile: "package.json",
+    confidence: "declared",
     fingerprint: "abc123",
     ...overrides,
   };

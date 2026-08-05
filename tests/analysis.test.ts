@@ -30,7 +30,7 @@ test("extractImports resolves tsconfig aliases and re-exports", async () => {
   }
 });
 
-test("detectAnomalies finds a directed cycle and an orphan", () => {
+test("detectAnomalies finds a directed cycle and an unimported file", () => {
   const graph = buildGraph([
     { filePath: "src/a.ts", lineCount: 1, imports: ["src/b.ts"], externalImports: [] },
     { filePath: "src/b.ts", lineCount: 1, imports: ["src/a.ts"], externalImports: [] },
@@ -40,6 +40,33 @@ test("detectAnomalies finds a directed cycle and an orphan", () => {
   const anomalies = detectAnomalies(graph);
   assert.deepEqual(anomalies.cycles, [["src/a.ts", "src/b.ts", "src/a.ts"]]);
   assert.deepEqual(anomalies.orphans, ["src/lonely.ts"]);
+});
+
+test("detectAnomalies reports an entry point as unimported", () => {
+  // The measurement is in-degree alone. It used to require out-degree 0 too,
+  // which meant an entry point — something that imports plenty but is imported
+  // by nothing — never appeared, even though "nothing imports this" is exactly
+  // what is true of it.
+  const graph = buildGraph([
+    { filePath: "src/main.ts", lineCount: 1, imports: ["src/lib.ts"], externalImports: [] },
+    { filePath: "src/lib.ts", lineCount: 1, imports: [], externalImports: [] },
+  ]);
+  clusterByFolder(graph);
+  const anomalies = detectAnomalies(graph);
+  assert.deepEqual(
+    anomalies.orphans,
+    ["src/main.ts"],
+    "an entry point with outgoing imports must still be reported",
+  );
+});
+
+test("detectAnomalies does not report an imported file as unimported", () => {
+  const graph = buildGraph([
+    { filePath: "src/main.ts", lineCount: 1, imports: ["src/lib.ts"], externalImports: [] },
+    { filePath: "src/lib.ts", lineCount: 1, imports: [], externalImports: [] },
+  ]);
+  clusterByFolder(graph);
+  assert.ok(!detectAnomalies(graph).orphans.includes("src/lib.ts"));
 });
 
 test("safeUnzip rejects an archive that exceeds the uncompressed limit", async () => {

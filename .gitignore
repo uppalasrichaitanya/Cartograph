@@ -1,11 +1,17 @@
 node_modules
 .next
 out
+dist
+build
 .env*
 !.env.example
 coverage
 *.tsbuildinfo
 .data
+.eslintcache
+.npm
+*.log
+npm-debug.log*
 
 # Local analysis fixtures / scratch upload dirs (not part of the test suite)
 test_repo
@@ -14,6 +20,24 @@ test_upload
 test_upload.zip
 test_repo_dummy
 test_repo_dummy.zip
+test_data
+generated_repos
 
 # Playwright MCP scratch output
 .playwright-mcp
+
+# Editor and OS files
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Documentation and temporary/internal files
+docs/
+implementation
+ip
+cartograph-diagram-spec-v2.md
+milestone-3-python-parser-plan.md
+PROJECT_CONTEXT.md
+status.md
+.claude

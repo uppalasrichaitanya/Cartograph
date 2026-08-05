@@ -27,6 +27,8 @@ import type {
   Provenance,
   ProvenanceOrigin,
   RepositoryIR,
+  RootConfidence,
+  UnresolvedImportNode,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,10 @@ const VALID_PROVENANCE_ORIGINS: readonly ProvenanceOrigin[] = [
   "ai-interpretation",
 ];
 const VALID_CAPABILITIES: readonly ParserCapability[] = ["imports", "exports"];
+const VALID_ROOT_CONFIDENCES: readonly RootConfidence[] = [
+  "declared",
+  "structural-heuristic",
+];
 const VALID_PARSE_ERROR_SEVERITIES = ["fatal", "partial"] as const;
 const VALID_PARSE_ERROR_REASONS = [
   "syntax",
@@ -246,6 +252,11 @@ export function validateModuleRoot(
       obj.manifestFile,
       `${path}.manifestFile`,
     ),
+    confidence: assertEnum(
+      obj.confidence,
+      `${path}.confidence`,
+      VALID_ROOT_CONFIDENCES,
+    ),
     fingerprint: assertNonEmptyString(
       obj.fingerprint,
       `${path}.fingerprint`,
@@ -271,6 +282,24 @@ export function validateExternalDependencyNode(
   } as unknown as ExternalDependencyNode;
 }
 
+/** Validate an UnresolvedImportNode structure. */
+export function validateUnresolvedImportNode(
+  value: unknown,
+  path: string,
+): UnresolvedImportNode {
+  const obj = assertObject(value, path);
+  const kind = assertEnum(obj.kind, `${path}.kind`, [
+    "UnresolvedImport",
+  ] as const);
+  return {
+    id: assertNonEmptyString(obj.id, `${path}.id`),
+    kind,
+    specifier: assertNonEmptyString(obj.specifier, `${path}.specifier`),
+    language: assertEnum(obj.language, `${path}.language`, VALID_LANGUAGES),
+    provenance: validateProvenance(obj.provenance, `${path}.provenance`),
+  } as unknown as UnresolvedImportNode;
+}
+
 /** Validate any IRNode by dispatching on `kind`. */
 export function validateNode(value: unknown, path: string): IRNode {
   const obj = assertObject(value, path);
@@ -282,10 +311,12 @@ export function validateNode(value: unknown, path: string): IRNode {
       return validateModuleRoot(value, path);
     case "ExternalDependency":
       return validateExternalDependencyNode(value, path);
+    case "UnresolvedImport":
+      return validateUnresolvedImportNode(value, path);
     default:
       throw new IRValidationError(
         `${path}.kind`,
-        `expected one of [File, ModuleRoot, ExternalDependency], got '${kind}'`,
+        `expected one of [File, ModuleRoot, ExternalDependency, UnresolvedImport], got '${kind}'`,
       );
   }
 }

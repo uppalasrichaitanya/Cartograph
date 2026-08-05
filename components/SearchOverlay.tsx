@@ -1,25 +1,48 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-
-type SearchItem = {
-  id: string;
-  label: string;
-  folder: string;
-};
+import {
+  highlightSegments,
+  rankSearchItems,
+  type RankedResult,
+  type SearchItem,
+} from "@/lib/workspace/search";
+import { SearchIcon } from "./Icons";
 
 /**
- * Simple fuzzy match: checks if all characters in the query appear
- * in order in the target string (case-insensitive).
+ * How many results to show.
+ *
+ * A cap is reasonable now that results are ranked — the top of the list is
+ * genuinely the best of the list. Previously the cap was hiding the absence of
+ * ranking, so the best match could fall outside it entirely.
+ *
+ * The true total is always reported below, so a truncated list never implies
+ * it is everything.
  */
-function fuzzyMatch(target: string, query: string): boolean {
-  const lower = target.toLowerCase();
-  const q = query.toLowerCase();
-  let qi = 0;
-  for (let i = 0; i < lower.length && qi < q.length; i++) {
-    if (lower[i] === q[qi]) qi++;
-  }
-  return qi === q.length;
+const RESULT_LIMIT = 50;
+
+/** Matched characters, marked so the ranking can be checked rather than trusted. */
+function Highlighted({
+  text,
+  indices,
+}: {
+  text: string;
+  indices: ReadonlyArray<number>;
+}) {
+  const segments = useMemo(() => highlightSegments(text, indices), [text, indices]);
+  return (
+    <>
+      {segments.map((segment, i) =>
+        segment.matched ? (
+          <mark key={i} className="search-match">
+            {segment.text}
+          </mark>
+        ) : (
+          <span key={i}>{segment.text}</span>
+        ),
+      )}
+    </>
+  );
 }
 
 export function SearchOverlay({
@@ -27,8 +50,8 @@ export function SearchOverlay({
   onSelect,
   onClose,
 }: {
-  items: SearchItem[];
-  onSelect: (id: string) => void;
+  items: ReadonlyArray<SearchItem>;
+  onSelect: (target: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -36,18 +59,20 @@ export function SearchOverlay({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return items.slice(0, 50);
-    return items.filter((item) => fuzzyMatch(item.label, query) || fuzzyMatch(item.folder, query)).slice(0, 50);
-  }, [items, query]);
+  const { results, total } = useMemo(
+    () => rankSearchItems(items, query, RESULT_LIMIT),
+    [items, query],
+  );
 
-  // Reset active index when results change.
-  useEffect(() => { setActiveIndex(0); }, [filtered]);
+  // Reset the cursor whenever the result set changes.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [results]);
 
-  // Focus input on mount.
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
-  // Scroll active item into view.
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
@@ -56,7 +81,10 @@ export function SearchOverlay({
   }, [activeIndex]);
 
   const handleSelect = useCallback(
-    (id: string) => { onSelect(id); onClose(); },
+    (result: RankedResult) => {
+      onSelect(result.item.target);
+      onClose();
+    },
     [onSelect, onClose],
   );
 
@@ -64,7 +92,7 @@ export function SearchOverlay({
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+        setActiveIndex((i) => Math.min(i + 1, results.length - 1));
         break;
       case "ArrowUp":
         e.preventDefault();
@@ -72,7 +100,7 @@ export function SearchOverlay({
         break;
       case "Enter":
         e.preventDefault();
-        if (filtered[activeIndex]) handleSelect(filtered[activeIndex].id);
+        if (results[activeIndex]) handleSelect(results[activeIndex]);
         break;
       case "Escape":
         e.preventDefault();
@@ -81,46 +109,90 @@ export function SearchOverlay({
     }
   };
 
+  const truncated = total > results.length;
+
   return (
     <div className="search-backdrop" onClick={onClose} role="presentation">
-      <div className="search-card" onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown} role="dialog" aria-modal="true" aria-label="Search files">
+      <div
+        className="search-card"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search files and packages"
+      >
         <div className="search-input-wrap">
-          <span className="search-icon" aria-hidden="true">⌕</span>
+          <span className="search-icon"><SearchIcon size={15} /></span>
           <input
             ref={inputRef}
             className="search-input"
             type="text"
-            placeholder="Search files…"
+            placeholder="Search files and packages…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search files"
+            aria-label="Search files and packages"
           />
           <span className="search-kbd" aria-hidden="true">Esc</span>
         </div>
-        <div className="search-results" ref={listRef} role="listbox" aria-label="Search results">
-          {filtered.length === 0 && (
-            <div className="search-empty">No files match &ldquo;{query}&rdquo;</div>
+
+        <div
+          className="search-results"
+          ref={listRef}
+          role="listbox"
+          aria-label="Search results"
+        >
+          {results.length === 0 && (
+            <div className="search-empty">
+              Nothing matches &ldquo;{query}&rdquo;
+            </div>
           )}
-          {filtered.map((item, i) => (
+          {results.map((result, i) => (
             <button
-              key={item.id}
+              key={result.item.id}
               type="button"
               className={`search-result ${i === activeIndex ? "is-active" : ""}`}
               role="option"
               aria-selected={i === activeIndex}
-              onClick={() => handleSelect(item.id)}
+              onClick={() => handleSelect(result)}
               onMouseEnter={() => setActiveIndex(i)}
             >
-              <span className="search-result-icon" aria-hidden="true">📄</span>
-              <span className="search-result-path">{item.label}</span>
-              <span className="search-result-folder">{item.folder}</span>
+              <span className="search-result-path">
+                {result.matchedField === "label" ? (
+                  <Highlighted
+                    text={result.item.label}
+                    indices={result.matchedIndices}
+                  />
+                ) : (
+                  result.item.label
+                )}
+              </span>
+              {/* Packages are named as such. Without it, a package row and a
+                  file row would look alike while meaning different things. */}
+              {result.item.kind === "package" && (
+                <span className="search-result-kind">package</span>
+              )}
+              <span className="search-result-folder">
+                {result.matchedField === "context" ? (
+                  <Highlighted
+                    text={result.item.context}
+                    indices={result.matchedIndices}
+                  />
+                ) : (
+                  result.item.context
+                )}
+              </span>
             </button>
           ))}
         </div>
-        {filtered.length > 0 && (
+
+        {results.length > 0 && (
           <div className="search-count" aria-live="polite">
-            {filtered.length} result{filtered.length === 1 ? "" : "s"}
-            {query && ` for "${query}"`}
+            {truncated
+              ? `Showing ${results.length} of ${total}`
+              : `${total} result${total === 1 ? "" : "s"}`}
+            {query.trim()
+              ? ` for "${query.trim()}"`
+              : " — most depended upon"}
           </div>
         )}
       </div>

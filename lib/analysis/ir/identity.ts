@@ -148,3 +148,29 @@ export function createExternalDependencyId(
 export function createModuleRootId(rootFingerprint: string): NodeId {
   return deriveId("root:" + rootFingerprint) as NodeId;
 }
+
+/**
+ * Derive a deterministic NodeId for an unresolved import.
+ *
+ * Uses a distinct namespace prefix ('unresolved:') to prevent collisions
+ * with file-based and external-dependency NodeIds.
+ *
+ * The referencing file's path is part of the derivation because an
+ * unresolved specifier's meaning is relative to where it was written:
+ * './missing' in a/x.ts and './missing' in b/y.ts denote different
+ * unknown targets and must not be merged into one node. Merging would
+ * assert an identity the evidence does not support.
+ *
+ * @param rootFingerprint - The root context where the import was referenced
+ * @param fromPath        - Path of the file containing the import specifier
+ * @param specifier       - Raw specifier exactly as written in source
+ */
+export function createUnresolvedImportId(
+  rootFingerprint: string,
+  fromPath: string,
+  specifier: string,
+): NodeId {
+  return deriveId(
+    rootFingerprint + ":unresolved:" + fromPath + ":" + specifier,
+  ) as NodeId;
+}

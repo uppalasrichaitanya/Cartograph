@@ -59,6 +59,23 @@ export type LanguageId = "typescript" | "javascript" | "python";
  * The fingerprint is a stable hash used in NodeId derivation so that
  * identical relative paths under different roots produce distinct IDs.
  */
+/**
+ * How a ModuleRoot's location was established.
+ *
+ * 'declared'            — a manifest explicitly identified this root
+ *                         (package.json, tsconfig.json, pyproject.toml's
+ *                         declared layout, setup.cfg's declared layout).
+ * 'structural-heuristic'— no manifest declared the layout; the root was
+ *                         inferred from directory structure or fell back
+ *                         to the project root.
+ *
+ * This vocabulary is shared with the Python parser's own import-root
+ * detection (lib/analysis/parsers/python/metadata.ts), which produces the
+ * same two values. It is preserved here so the distinction survives into
+ * the IR rather than being discarded at the pipeline boundary.
+ */
+export type RootConfidence = "declared" | "structural-heuristic";
+
 export interface ModuleRoot {
   readonly id: NodeId;
   readonly kind: "ModuleRoot";
@@ -68,9 +85,18 @@ export interface ModuleRoot {
   /** The manifest file name that signaled this root (e.g. "package.json"). */
   readonly manifestFile: string;
   /**
+   * Whether this root was declared by a manifest or inferred structurally.
+   * Never absent — every root knows how it was found.
+   */
+  readonly confidence: RootConfidence;
+  /**
    * Stable hash used in ID derivation.
    * Computed as SHA-256(rootPath + ':' + manifestFile), truncated to 128 bits,
    * base62-encoded. See specs/cartograph_ir_identity_model_spec.md Section 5.
+   *
+   * Note: confidence is deliberately NOT part of the fingerprint. Identity
+   * must depend only on location, so that re-analysing the same repository
+   * with better root detection does not change every NodeId beneath it.
    */
   readonly fingerprint: string;
 }
@@ -131,7 +157,11 @@ export type ParserCapability = "imports" | "exports";
 // ---------------------------------------------------------------------------
 
 /** Discriminant for the IRNode union. */
-export type NodeKind = "File" | "ModuleRoot" | "ExternalDependency";
+export type NodeKind =
+  | "File"
+  | "ModuleRoot"
+  | "ExternalDependency"
+  | "UnresolvedImport";
 
 /**
  * Represents a single source file in the repository.
@@ -167,8 +197,15 @@ export interface FileNode {
  * Represents an external dependency referenced in source but not part of
  * the analyzed repository (e.g., npm packages, stdlib modules).
  *
- * Unresolvable imports become ExternalDependencyNodes with a 'heuristic'
- * provenance note — never silently discarded.
+ * Provenance is 'verified': the fact this node asserts is that the import
+ * specifier was observed in source, which is directly witnessed. It makes
+ * no claim that the package exists, resolves, or is installed — that claim
+ * is not made anywhere in the IR, so it cannot be overstated here.
+ *
+ * Imports that could not be resolved and are NOT believed to be external
+ * become UnresolvedImportNode instead. The two must never be conflated:
+ * `import "react"` and `import "./missing"` are different epistemic
+ * situations and are represented by different node kinds.
  */
 export interface ExternalDependencyNode {
   readonly id: NodeId;
@@ -180,10 +217,37 @@ export interface ExternalDependencyNode {
 }
 
 /**
+ * Represents an import specifier that the parser classified as internal to
+ * the project but could not resolve to any discovered file.
+ *
+ * This is the IR's representation of a known unknown. The dependency
+ * genuinely exists in the source; its target could not be determined.
+ * Rendering it as an absent edge would make it indistinguishable from
+ * "imports nothing", which would be a false statement about the code.
+ *
+ * Provenance is 'verified' for the same reason as ExternalDependencyNode:
+ * the specifier was observed. What is unknown is the target, and that is
+ * expressed by the node's kind rather than by weakening its provenance.
+ */
+export interface UnresolvedImportNode {
+  readonly id: NodeId;
+  readonly kind: "UnresolvedImport";
+  /** Raw specifier exactly as written in source. */
+  readonly specifier: string;
+  /** Language of the file that referenced it. */
+  readonly language: LanguageId;
+  readonly provenance: Provenance;
+}
+
+/**
  * Union of all node types in the IR.
  * Discriminated on the `kind` field.
  */
-export type IRNode = FileNode | ModuleRoot | ExternalDependencyNode;
+export type IRNode =
+  | FileNode
+  | ModuleRoot
+  | ExternalDependencyNode
+  | UnresolvedImportNode;
 
 // ---------------------------------------------------------------------------
 // Edges

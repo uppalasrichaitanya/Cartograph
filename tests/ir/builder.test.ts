@@ -228,7 +228,7 @@ test("IRBuilder — buildExternalDependencyNode", async (t) => {
   const builder = new IRBuilder();
   const root = builder.buildModuleRoot("", "typescript", "package.json");
 
-  await t.test("creates node with heuristic provenance", () => {
+  await t.test("creates node with verified provenance", () => {
     const ext = builder.buildExternalDependencyNode(
       root.fingerprint,
       "react",
@@ -236,7 +236,11 @@ test("IRBuilder — buildExternalDependencyNode", async (t) => {
     );
     assert.equal(ext.kind, "ExternalDependency");
     assert.equal(ext.name, "react");
-    assert.equal(ext.provenance.origin, "heuristic");
+    // The asserted fact is that the specifier was observed in source, which
+    // is directly witnessed. The IR makes no claim the package resolves or
+    // is installed, so there is nothing here to overstate. Imports that
+    // genuinely could not be resolved are UnresolvedImportNode instead.
+    assert.equal(ext.provenance.origin, "verified");
   });
 
   await t.test("deterministic: same name → same ID", () => {

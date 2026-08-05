@@ -1,40 +1,42 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import type { FileEvidence } from "@/lib/analysis/projectConfidence";
 import type { GraphNode, DependencyGraph } from "@/types/graph";
+import { CloseIcon } from "./Icons";
 
 export function FileDetailPanel({
   file,
   graph,
+  evidence,
+  interpretation,
   onClose,
   onNavigateToFile,
   onHoverFile,
 }: {
   file: GraphNode | null;
   graph: DependencyGraph;
+  /**
+   * Evidence behind this file, read from the IR. `null` means no evidence
+   * record was available — which is not the same as "everything is fine", so
+   * the panel stays silent rather than implying full confidence.
+   */
+  evidence: FileEvidence | null;
+  /**
+   * Generated interpretation, when one exists. Nothing produces this yet.
+   * Typed and threaded now so the surface that displays it is established
+   * before the first AI feature rather than after.
+   */
+  interpretation?: string;
   onClose: () => void;
   onNavigateToFile: (fileId: string) => void;
   onHoverFile: (fileId: string | null) => void;
 }) {
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  const copyText = useCallback((text: string, field: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 1500);
-    });
-  }, []);
-
   if (!file) return null;
 
   const importers = graph.edges
     .filter((edge) => edge.to === file.id)
     .map((edge) => graph.nodes.find((node) => node.id === edge.from)?.path)
     .filter((path): path is string => Boolean(path));
-
-  // Get the last segment as the relative name.
-  const segments = file.path.split("/");
-  const fileName = segments[segments.length - 1];
 
   return (
     <aside className="detail-panel is-entering" aria-label={`Details for ${file.path}`}>
@@ -43,34 +45,23 @@ export function FileDetailPanel({
           <p className="eyebrow">FILE</p>
           <h2>{file.path}</h2>
         </div>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="Close file details">×</button>
+        <button className="icon-button" type="button" onClick={onClose} aria-label="Close file details"><CloseIcon size={14} /></button>
       </div>
 
-      {/* Quick Actions (Issue 25) */}
+      {/* Copy Path and Copy Name are gone: they operated the tool rather than
+          advancing understanding, and occupied the most valuable space in the
+          panel to do it. The path above remains selectable, which is enough.
+
+          Reveal in Graph stays — it returns attention to the map, which is
+          where understanding is built — minus its emoji. */}
       <div className="quick-actions">
-        <button
-          type="button"
-          className={`quick-action ${copiedField === "path" ? "is-copied" : ""}`}
-          onClick={() => copyText(file.path, "path")}
-          title="Copy file path"
-        >
-          {copiedField === "path" ? "✓ Copied" : "📋 Copy Path"}
-        </button>
-        <button
-          type="button"
-          className={`quick-action ${copiedField === "relative" ? "is-copied" : ""}`}
-          onClick={() => copyText(fileName, "relative")}
-          title="Copy file name"
-        >
-          {copiedField === "relative" ? "✓ Copied" : "📄 Copy Name"}
-        </button>
         <button
           type="button"
           className="quick-action"
           onClick={() => onNavigateToFile(file.id)}
           title="Center this node in the graph"
         >
-          🎯 Reveal in Graph
+          Reveal in graph
         </button>
       </div>
 
@@ -144,6 +135,59 @@ export function FileDetailPanel({
             ))}
           </ul>
         </section>
+      )}
+
+      {/* Unresolved imports — what could not be determined.
+          Listed before the confidence note because the specifiers themselves
+          are the actionable part; the explanation supports them. */}
+      {evidence && evidence.unresolvedImports.length > 0 && (
+        <section>
+          <h3>
+            Unresolved imports <span>{evidence.unresolvedImports.length}</span>
+          </h3>
+          <p className="evidence-copy">
+            These imports exist in the source. Their targets could not be found
+            in this repository.
+          </p>
+          <ul>
+            {evidence.unresolvedImports.map((item) => (
+              <li key={item}>
+                <span className="file-ref is-unresolved" style={{ cursor: "default" }}>
+                  <code>{item}</code>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Confidence — stated plainly, and only when it is not full.
+          A verified file says nothing here: announcing full confidence on
+          every file would make the statement meaningless where it matters. */}
+      {evidence && evidence.reducedBecause.length > 0 && (
+        <section className="evidence-section">
+          <h3>Confidence</h3>
+          <p className="evidence-copy">
+            Reduced for this file.
+          </p>
+          <ul className="evidence-reasons">
+            {evidence.reducedBecause.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Generated interpretation.
+          Nothing produces this today — `interpretation` is always undefined.
+          The slot exists so the first AI feature inherits a surface that is
+          already visually and structurally separate from every fact above,
+          rather than being fitted into one under delivery pressure. */}
+      {interpretation && (
+        <div className="assisted-note">
+          <span className="assisted-label">Generated interpretation</span>
+          <p>{interpretation}</p>
+        </div>
       )}
     </aside>
   );

@@ -23,6 +23,7 @@ import {
   createModuleRootId,
   createNodeId,
   createRootFingerprint,
+  createUnresolvedImportId,
 } from "./identity";
 import type {
   Edge,
@@ -36,6 +37,8 @@ import type {
   RawExtraction,
   ResolvedImport,
   RepositoryIR,
+  RootConfidence,
+  UnresolvedImportNode,
 } from "./types";
 import { validateRepositoryIR } from "./validation";
 
@@ -79,11 +82,16 @@ export class IRBuilder implements IRBuilderContract {
    * @param rootPath     - Relative to the repository root ("" for top-level)
    * @param language     - Primary language of this root
    * @param manifestFile - The file that signaled this root (e.g., "package.json")
+   * @param confidence   - Whether a manifest declared this root, or it was
+   *                       inferred structurally. Defaults to 'declared'
+   *                       because the only callers that omit it are those
+   *                       that found an actual manifest file.
    */
   buildModuleRoot(
     rootPath: string,
     language: LanguageId,
     manifestFile: string,
+    confidence: RootConfidence = "declared",
   ): ModuleRoot {
     const fingerprint = createRootFingerprint(rootPath, manifestFile);
     const id = createModuleRootId(fingerprint);
@@ -93,6 +101,7 @@ export class IRBuilder implements IRBuilderContract {
       rootPath,
       language,
       manifestFile,
+      confidence,
       fingerprint,
     };
   }
@@ -196,8 +205,17 @@ export class IRBuilder implements IRBuilderContract {
    * Create an ExternalDependencyNode for a package/module referenced
    * in source but not part of the analyzed repository.
    *
-   * Provenance is always 'heuristic' — we infer the dependency from
-   * an import specifier without verifying against a package registry.
+   * Provenance is 'verified'. The fact this node asserts is that the
+   * import specifier was observed in source, which is directly witnessed
+   * by the parser. It deliberately makes no claim that the package exists,
+   * resolves, or is installed — no such claim appears anywhere in the IR,
+   * so there is nothing here to overstate.
+   *
+   * (Previously this was marked 'heuristic' with a note about registry
+   * verification. That understated evidence we actually have, and — worse —
+   * gave genuinely unresolvable imports the same label, making a real
+   * package and a broken import indistinguishable downstream. Unresolvable
+   * imports are now UnresolvedImportNode; see buildUnresolvedImportNode.)
    *
    * Not part of the IRBuilderContract interface (which only covers
    * the core build methods), but essential for the pipeline.
@@ -212,10 +230,36 @@ export class IRBuilder implements IRBuilderContract {
       kind: "ExternalDependency",
       name,
       language,
-      provenance: {
-        origin: "heuristic",
-        note: "Inferred from import specifier; not verified against registry",
-      },
+      provenance: { origin: "verified" },
+    };
+  }
+
+  /**
+   * Create an UnresolvedImportNode for an import specifier the parser
+   * classified as internal to the project but could not resolve to any
+   * discovered file.
+   *
+   * Provenance is 'verified' for the same reason as external dependencies:
+   * the specifier was observed in source. What is unknown is the target,
+   * and that is carried by the node's kind rather than by weakening the
+   * provenance of a fact we did witness.
+   *
+   * The referencing file's path participates in identity — see
+   * createUnresolvedImportId for why identical specifiers in different
+   * files must not collapse into one node.
+   */
+  buildUnresolvedImportNode(
+    rootFingerprint: string,
+    fromPath: string,
+    specifier: string,
+    language: LanguageId,
+  ): UnresolvedImportNode {
+    return {
+      id: createUnresolvedImportId(rootFingerprint, fromPath, specifier),
+      kind: "UnresolvedImport",
+      specifier,
+      language,
+      provenance: { origin: "verified" },
     };
   }
 

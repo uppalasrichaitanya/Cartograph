@@ -288,6 +288,70 @@ test("TypeScriptParser — resolveImport", async (t) => {
       assert.equal(result.resolved, null);
       assert.equal(result.raw, "./does/not/exist");
     });
+
+    // -----------------------------------------------------------------------
+    // Phase 0.5 — unresolvedKind classification (parity with the Python parser)
+    //
+    // A specifier beginning with './', '../' or '/' cannot denote an npm
+    // package: the syntax alone rules it out, independent of any config. When
+    // such a specifier fails lookup, the honest answer is "internal reference
+    // whose target is unknown", not "external dependency".
+    // -----------------------------------------------------------------------
+
+    await t.test("genuine external import is classified external", () => {
+      const fromFile = fileInput(root, "src/entry.ts");
+      const result = parser.resolveImport("react", fromFile, knownFiles);
+      assert.equal(result.resolved, null);
+      assert.equal(result.unresolvedKind, "external");
+    });
+
+    await t.test("scoped package name is classified external", () => {
+      const fromFile = fileInput(root, "src/entry.ts");
+      const result = parser.resolveImport("@scope/pkg", fromFile, knownFiles);
+      assert.equal(result.resolved, null);
+      assert.equal(result.unresolvedKind, "external");
+    });
+
+    await t.test("broken relative import is unresolved-internal, not external", () => {
+      const fromFile = fileInput(root, "src/entry.ts");
+      const result = parser.resolveImport("./does/not/exist", fromFile, knownFiles);
+      assert.equal(result.resolved, null);
+      assert.equal(result.unresolvedKind, "unresolved-internal");
+    });
+
+    await t.test("broken parent-relative import is unresolved-internal", () => {
+      const fromFile = fileInput(root, "src/lib/helper.ts");
+      const result = parser.resolveImport("../gone", fromFile, knownFiles);
+      assert.equal(result.resolved, null);
+      assert.equal(result.unresolvedKind, "unresolved-internal");
+    });
+
+    await t.test("broken root-absolute import is unresolved-internal", () => {
+      const fromFile = fileInput(root, "src/entry.ts");
+      const result = parser.resolveImport("/src/gone", fromFile, knownFiles);
+      assert.equal(result.resolved, null);
+      assert.equal(result.unresolvedKind, "unresolved-internal");
+    });
+
+    await t.test("a resolved import carries no unresolvedKind", () => {
+      const fromFile = fileInput(root, "src/relative.ts");
+      const result = parser.resolveImport("./lib/helper", fromFile, knownFiles);
+      assert.equal(result.resolved, "src/lib/helper.ts");
+      assert.equal(result.unresolvedKind, undefined);
+    });
+
+    await t.test(
+      "an alias-shaped specifier that does not resolve stays external",
+      () => {
+        // Deliberate: a tsconfig path alias may legitimately point at
+        // node_modules, so a failed alias lookup is not proof of an internal
+        // target. Only syntax-guaranteed-internal forms are reclassified.
+        const fromFile = fileInput(root, "src/entry.ts");
+        const result = parser.resolveImport("@/lib/gone", fromFile, knownFiles);
+        assert.equal(result.resolved, null);
+        assert.equal(result.unresolvedKind, "external");
+      },
+    );
   } finally {
     parser.dispose();
     await rm(root, { recursive: true, force: true });

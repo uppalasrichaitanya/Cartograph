@@ -1,3 +1,4 @@
+
 /**
  * Cartograph Pipeline Integration — IR Bridge
  *
@@ -36,6 +37,8 @@ import type {
   RawExtraction,
   ResolvedImport,
   RepositoryIR,
+  RootConfidence,
+  UnresolvedImportNode,
 } from "./types";
 import type { SourceFileAnalysis } from "@/types/graph";
 
@@ -66,21 +69,43 @@ const MANIFEST_FILES: ReadonlyArray<{ file: string; language: LanguageId }> = [
  * If no manifest file is found, a synthetic root with
  * "package.json" is created — the pipeline must always have
  * at least one root to assign file ownership.
+ *
+ * Root confidence:
+ *   - A manifest was found on disk        → 'declared'
+ *   - No manifest; synthetic root invented → 'structural-heuristic'
+ *
+ * The caller may override this with a parser-supplied confidence via
+ * `rootConfidenceOverride` — see buildRepositoryIR. An override only ever
+ * weakens confidence, never strengthens it: a parser reporting that it
+ * guessed its own import root is evidence the root is heuristic even when
+ * a manifest happened to exist.
  */
 function discoverModuleRoot(
   projectRoot: string,
   builder: IRBuilder,
+  rootConfidenceOverride?: RootConfidence,
 ): ModuleRoot {
+  const weaken = (found: RootConfidence): RootConfidence =>
+    found === "declared" && rootConfidenceOverride === "structural-heuristic"
+      ? "structural-heuristic"
+      : found;
+
   for (const { file, language } of MANIFEST_FILES) {
     const manifestPath = path.join(projectRoot, file);
     if (existsSync(manifestPath)) {
-      return builder.buildModuleRoot("", language, file);
+      return builder.buildModuleRoot("", language, file, weaken("declared"));
     }
   }
 
   // Fallback: no manifest found. Create a synthetic root.
-  // This ensures every file has an ownerRootId.
-  return builder.buildModuleRoot("", "javascript", "package.json");
+  // This ensures every file has an ownerRootId. The root's location was
+  // not declared anywhere — it was assumed — so it is never 'declared'.
+  return builder.buildModuleRoot(
+    "",
+    "javascript",
+    "package.json",
+    "structural-heuristic",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -142,19 +167,26 @@ function isRawExtractionArray(
  *
  * @param projectRoot - Absolute path to the extracted project root
  * @param input - Resolved RawExtractions or legacy SourceFileAnalysis[]
+ * @param rootConfidenceOverride - Optional parser-reported root confidence.
+ *   The Python parser detects its own import root and reports whether that
+ *   came from a declared layout or a structural guess; passing it here keeps
+ *   that judgement in the IR instead of discarding it. Only ever weakens.
  * @returns The validated RepositoryIR, or null on construction failure
  */
 export function buildRepositoryIR(
   projectRoot: string,
   input: ReadonlyArray<RawExtraction>,
+  rootConfidenceOverride?: RootConfidence,
 ): RepositoryIR | null;
 export function buildRepositoryIR(
   projectRoot: string,
   input: SourceFileAnalysis[],
+  rootConfidenceOverride?: RootConfidence,
 ): RepositoryIR | null;
 export function buildRepositoryIR(
   projectRoot: string,
   input: ReadonlyArray<RawExtraction> | SourceFileAnalysis[],
+  rootConfidenceOverride?: RootConfidence,
 ): RepositoryIR | null {
   // Normalize input: adapt legacy SourceFileAnalysis[] to RawExtraction[]
   const extractions: ReadonlyArray<RawExtraction> = isRawExtractionArray(
@@ -166,7 +198,7 @@ export function buildRepositoryIR(
     const builder = new IRBuilder();
 
     // 1. Discover module root
-    const root = discoverModuleRoot(projectRoot, builder);
+    const root = discoverModuleRoot(projectRoot, builder, rootConfidenceOverride);
 
     // 2. Build FileNodes from RawExtraction data
     const fileNodes: FileNode[] = [];
@@ -185,6 +217,10 @@ export function buildRepositoryIR(
     const allNodes: IRNode[] = [root, ...fileNodes];
     const allEdges: Edge[] = [];
     const externalDeps = new Map<string, ExternalDependencyNode>();
+    // Keyed by "<referencing file path> <specifier>" — identical specifiers
+    // in different files denote different unknown targets and must stay
+    // distinct. The space separator is safe: neither component contains one.
+    const unresolvedImports = new Map<string, UnresolvedImportNode>();
 
     for (const fileNode of fileNodes) {
       // Containment edge: root → file
@@ -194,27 +230,64 @@ export function buildRepositoryIR(
       const raw = rawExtractionMap.get(fileNode.path)!;
       const resolved: ResolvedImport[] = [];
 
-      // Internal imports: resolve via PathIndex
+      // Internal imports: resolve via PathIndex.
+      //
+      // A specifier that reaches this loop was classified as internal by
+      // the parser. If the PathIndex cannot resolve it, that is a known
+      // unknown — the import exists in source, its target could not be
+      // determined — and it becomes an UnresolvedImportNode.
+      //
+      // It must NOT become an ExternalDependencyNode: doing so made
+      // `import "./missing"` indistinguishable from `import "react"`,
+      // erasing the distinction downstream consumers need in order to
+      // tell a real package from a broken reference.
       for (const importPath of raw.internalImports) {
         const targetId = pathIndex.resolve(importPath);
         if (targetId) {
           resolved.push({ targetId, raw: importPath });
         } else {
-          // Import couldn't be resolved to a known file —
-          // treat as external dependency
-          if (!externalDeps.has(importPath)) {
-            const extNode = builder.buildExternalDependencyNode(
-              root.fingerprint,
-              importPath,
-              languageFromPath(fileNode.path),
+          const key = `${fileNode.path} ${importPath}`;
+          if (!unresolvedImports.has(key)) {
+            unresolvedImports.set(
+              key,
+              builder.buildUnresolvedImportNode(
+                root.fingerprint,
+                fileNode.path,
+                importPath,
+                languageFromPath(fileNode.path),
+              ),
             );
-            externalDeps.set(importPath, extNode);
           }
           resolved.push({
-            targetId: externalDeps.get(importPath)!.id,
+            targetId: unresolvedImports.get(key)!.id,
             raw: importPath,
           });
         }
+      }
+
+      // Explicitly unresolved internal imports.
+      //
+      // extractAll() already classifies these (unresolvedKind ===
+      // 'unresolved-internal') and carries them on RawExtraction. Until
+      // now the field was computed and then never read, so this evidence
+      // was discarded at the pipeline boundary. It is preserved here.
+      for (const specifier of raw.unresolvedInternalImports ?? []) {
+        const key = `${fileNode.path} ${specifier}`;
+        if (!unresolvedImports.has(key)) {
+          unresolvedImports.set(
+            key,
+            builder.buildUnresolvedImportNode(
+              root.fingerprint,
+              fileNode.path,
+              specifier,
+              languageFromPath(fileNode.path),
+            ),
+          );
+        }
+        resolved.push({
+          targetId: unresolvedImports.get(key)!.id,
+          raw: specifier,
+        });
       }
 
       // External imports: always become ExternalDependencyNodes
@@ -241,6 +314,11 @@ export function buildRepositoryIR(
     // Add all external dependency nodes
     for (const extNode of externalDeps.values()) {
       allNodes.push(extNode);
+    }
+
+    // Add all unresolved import nodes
+    for (const unresolvedNode of unresolvedImports.values()) {
+      allNodes.push(unresolvedNode);
     }
 
     // 5. Finalize — all-or-nothing validation gate
