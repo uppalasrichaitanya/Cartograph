@@ -1,5 +1,6 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
+import { UNIQUE_UPLOAD_TOKEN_OPTIONS } from "@/lib/storage/uploadPathname";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,12 @@ export async function POST(request: Request): Promise<NextResponse> {
             "application/octet-stream",
           ],
           maximumSizeInBytes: 25 * 1024 * 1024, // 25 MB
+          // Every upload must land on its own pathname. The pathname comes
+          // from the browser, so the token — not the client — is what
+          // guarantees it: without a random suffix, re-uploading the same
+          // project reuses one Blob URL, and the cleanup that follows an
+          // analysis then deletes another request's archive.
+          ...UNIQUE_UPLOAD_TOKEN_OPTIONS,
         };
       },
       onUploadCompleted: async () => {

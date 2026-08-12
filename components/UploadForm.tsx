@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { upload } from "@vercel/blob/client";
+import { buildUploadPathname } from "@/lib/storage/uploadPathname";
 import { ProgressStream, type ProgressState } from "./ProgressStream";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 
@@ -102,10 +103,15 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
 
       if (useBlob) {
         // --- Vercel Blob: client-side upload directly to Blob storage ---
-        const blob = await upload(file.name, file, {
+        // The pathname must be unique per upload: the analysis deletes the
+        // archive when it finishes, so a shared pathname would let one run's
+        // cleanup remove another run's archive.
+        const blob = await upload(buildUploadPathname(file.name), file, {
           access: "public",
           handleUploadUrl: "/api/upload-url",
         });
+        // Use the URL Blob actually returned — it carries the random suffix
+        // the token added, so analysis and cleanup act on this upload alone.
         zipRef = blob.url;
       } else {
         // --- Local: upload through the local API route ---
