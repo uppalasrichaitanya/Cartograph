@@ -176,6 +176,8 @@ honest provenance, backward-compatible storage, and no speculative relationship 
 
 ## Milestone 5 - Analyzer Plugin Framework
 
+**Status:** Complete (2026-08-29).
+
 **Objective:** Formalize `buildGraph`, `detectAnomalies`, and `clusterByFolder` as tiered
 analyzer plugins behind a shared interface, with ordered (not DAG) execution and a context
 object letting tier-2 analyzers read tier-1 output.
@@ -209,6 +211,8 @@ capability degradation is demonstrably correct, not just designed.
 ---
 
 ## Milestone 6 - Architecture Model Foundations
+
+**Status:** Complete (2026-08-29).
 
 **Objective:** Introduce the Architecture Model as a grouping/boundary index over existing
 node IDs, populated only with deterministic containment data (module roots, folder hierarchy)
@@ -419,7 +423,7 @@ fixed checklist, since its timing is deliberately conditional.
 identity, containment/dependency edge separation, minimal versioned schema, and a genuinely
 general parser interface must all exist before Python-specific code is written.
 
-**Before a third language (mandatory):** Milestones 1 through 5. The third language's purpose
+**Before a third language (mandatory):** Milestones 1 through 6. The third language's purpose
 is stress-testing capability degradation across a real analyzer framework and a real
 Architecture Model — both must exist and be proven, not just designed, before it's a
 meaningful test.
@@ -428,17 +432,17 @@ meaningful test.
 
 ## Explicitly deferred / out of scope for now
 
-- Full analyzer DAG dependency scheduler (ordered tiers are sufficient through Milestone 9)
+- Full analyzer DAG dependency scheduler (ordered tiers are sufficient through Milestone 10)
 - Third-party analyzer plugin sandboxing and marketplace (a separate security-review-level
   initiative, only worth starting if third-party extensibility becomes a confirmed product goal)
-- Symbol-level (tier 2) declarations beyond what a real dead-code analyzer requires
+- Symbol relationship analysis beyond the parser-observed declaration index
 - Rich capability-flag taxonomy beyond the minimal set needed at each stage
 - Full IR migration/transform tooling (a single version field with an additive-only policy is
   sufficient until there's an actual breaking change to migrate)
-- Storage backend migration to production use (the interface is proven in Milestone 7; full
+- Storage backend migration to production use (the interface is proven in Milestone 8; full
   migration is deferred until benchmark data justifies it)
-- Background job execution model (Milestone 10, conditional on observed strain)
-- Drift-tracking across repo re-uploads (Milestone 10, conditional on product decision)
+- Background job execution model (Milestone 11, conditional on observed strain)
+- Drift-tracking across repo re-uploads (Milestone 11, conditional on product decision)
 - Permanently out of scope per product philosophy: CI/CD policy gating, general code
   search/navigation, SAST/vulnerability scanning, open-ended code generation
 
@@ -450,9 +454,9 @@ meaningful test.
    exists.
 2. **After Milestone 3 (most important)** — confirm nothing about Python forced a change to
    the shared interface, IR, or identity model, while only two parsers exist to fix.
-3. **After Milestone 6** — with three structurally different languages proven, decide with
+3. **After Milestone 7** — with three structurally different languages proven, decide with
    real data whether the capability/confidence model needs adjustment.
-4. **After Milestone 8 (most important from a trust standpoint)** — confirm AI grounding holds
+4. **After Milestone 9 (most important from a trust standpoint)** — confirm AI grounding holds
    under adversarial use before any heuristic, opinionated feature is added on top of it.
 
 ---
@@ -469,7 +473,7 @@ specific event that means it isn't):
 - **Consistency.** An automated CI check asserts that facts shared across views (e.g. an edge
   present in both the dependency graph and the Architecture Model) never disagree.
 - **Trustworthiness.** 100% of AI-cited facts resolve to real graph IDs, tracked as an ongoing
-  metric via the Milestone 8 grounding validator — not a one-time pass/fail.
+  metric via the Milestone 9 grounding validator — not a one-time pass/fail.
 - **Determinism.** Zero determinism regressions merged to main over a rolling window.
 
 ---

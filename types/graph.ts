@@ -1,4 +1,6 @@
 import type { RepositoryIR } from "@/lib/analysis/ir/types";
+import type { ArchitectureModelData } from "@/lib/analysis/architecture-model/types";
+import type { AnalysisView } from "@/lib/analysis/analyzers/interface";
 
 export type SourceFileAnalysis = {
   filePath: string;
@@ -206,4 +208,8 @@ export type AnalysisResult = {
    * Cartograph's evidence model to the interface that must display it.
    */
   repositoryIR?: RepositoryIR;
+  /** Analyzer execution summaries. Absent on analyses created before Milestone 5. */
+  analysisViews?: ReadonlyArray<AnalysisView>;
+  /** Deterministic boundary index. Absent on analyses created before Milestone 6. */
+  architectureModel?: ArchitectureModelData;
 };

@@ -1,45 +1,41 @@
-# Milestone 4: Verified Symbol Foundations
+# Milestones 5-6: Analyzer Framework and Architecture Model
 
-**Goal:** Add a deterministic, parser-observed symbol index before introducing the analyzer
-framework.
+**Status:** Complete.
 
-**Architecture:** Parsers extract named declarations alongside imports. The IR builder embeds
-validated declarations in each `FileNode` while keeping `irVersion: 1`. Search uses structured
-file/package/symbol targets, and workspace position optionally records a symbol ID.
+## Delivered
 
-## Scope
-
-- Add stable `SymbolId`, declaration kinds, 1-based source ranges, and provenance.
-- Derive identity from file ID, kind, qualified name, and same-name ordinal. Source positions
-  never participate in identity.
-- Extract TypeScript/JavaScript functions, named function/arrow variable initializers, classes,
-  constructors, methods, interfaces, type aliases, and enums.
-- Extract Python functions, async functions, nested functions, classes, constructors, and
-  methods.
-- Preserve source order and reduced provenance for declarations recovered from invalid files.
-- Persist declarations optionally so older analyses remain readable.
-- Search symbols only after a query is entered. Navigate to the owning file and focus the
-  declaration in the inspector.
-- Round-trip valid symbol selections through `?symbol=` and reject stale or cross-file IDs.
-
-## Explicit Non-Goals
-
-- No call graph, reference graph, or speculative relationship inference.
-- Symbols do not become canvas nodes; dependency geometry remains file-level.
-- No analyzer framework in this milestone.
+- Added a minimal `Analyzer` contract with stable IDs, two ordered tiers, explicit
+  earlier-tier dependencies, and `AnalysisContext.getResult()` lookup.
+- Added capability requirements with explicit `skip` or `degrade` behavior.
+- Propagated reduced capability/provenance through dependent analyzers so downstream output
+  never silently appears stronger than its inputs.
+- Migrated dependency graph construction, folder clustering, and dependency observations to
+  built-in analyzer plugins without changing their existing public helper functions.
+- Persisted optional analyzer execution summaries; older stored analyses remain valid.
+- Added a deterministic Architecture Model over canonical IR node IDs.
+- Indexed module roots, folder hierarchy, and the existing display-region grouping with
+  stable boundary IDs, parent relationships, provenance, and query methods.
+- Migrated the folder analyzer and render pipeline to Architecture Model regions while
+  preserving the previous grouping output exactly.
+- Persisted the optional Architecture Model; older analyses fall back to their stored
+  clusters and render data.
 
 ## Verification
 
-- Cross-language fixtures for nesting, methods, constructors, async functions, named arrow
-  functions, overloads, duplicates, and syntax errors.
-- Repeated-run tests for deterministic declaration order and identity.
-- IR validation for names, source ranges, source order, unique IDs, and provenance.
-- Compatibility tests for analyses without declaration data.
-- Search and URL tests covering empty queries, ranking, structured targets, round trips, and
-  stale selections.
-- Full tests, lint, production build, dependency audit, diff validation, and browser smoke
-  tests for TypeScript and Python uploads.
+- Analyzer contract tests cover tier ordering, earlier-result lookup, duplicate IDs, invalid
+  dependencies, capability degradation, skipping, dependency propagation, and determinism.
+- Architecture Model tests cover canonical-ID queries, folder hierarchy, legacy grouping
+  equivalence, byte-identical repeated builds, runtime validation, and provenance propagation.
+- Existing parser, IR, safety, workspace, and browser-facing behavior remains covered by the
+  full suite.
 
-The Analyzer Plugin Framework follows as Milestone 5. Putting symbols first means future
-symbol-relationship analyzers produce useful results immediately instead of landing before
-the declaration data they need.
+## Explicit Non-Goals
+
+- No analyzer DAG scheduler or third-party plugin sandbox.
+- No heuristic layers, domains, services, or inferred architecture boundaries.
+- No call graph or symbol-reference edges.
+- No change to dependency geometry: it remains file-level and import-based.
+
+Milestone 7, Third Language and Capability Stress Test, is next. It should add a structurally
+different language without changing the parser interface, analyzer interface, IR schema, or
+Architecture Model contract.

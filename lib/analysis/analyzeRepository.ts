@@ -2,9 +2,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { buildGraph } from "./buildGraph";
-import { clusterByFolder } from "./clusterByFolder";
-import { detectAnomalies } from "./detectAnomalies";
 import { detectRepoMeta } from "./detectRepoMeta";
 import { discoverSourceFiles, findProjectRoot } from "./discoverFiles";
 import { extractAll, toLegacyResult } from "./extractAll";
@@ -17,8 +14,21 @@ import { SafetyEventLog } from "@/lib/safety/eventLog";
 import { getStorage, isUsingBlobStorage, StorageError } from "@/lib/storage";
 import { isValidUploadReference } from "@/lib/storage/uploadReference";
 import { buildRepositoryIR } from "./ir/bridge";
+import { buildArchitectureModel } from "./architecture-model/model";
+import {
+  ANOMALY_ANALYZER_ID,
+  createBuiltInAnalyzerRegistry,
+  DEPENDENCY_GRAPH_ANALYZER_ID,
+  FOLDER_CLUSTER_ANALYZER_ID,
+} from "./analyzers/builtins";
+import { toAnalysisView } from "./analyzers/registry";
 import type { RootConfidence } from "./ir/types";
-import type { AnalysisResult } from "@/types/graph";
+import type {
+  AnalysisResult,
+  Anomalies,
+  Cluster,
+  DependencyGraph,
+} from "@/types/graph";
 
 export type ProgressPhase = "validating" | "unzipping" | "parsing" | "clustering" | "detecting" | "layout" | "persisting";
 export type ProgressReporter = (phase: ProgressPhase, detail: string) => void | Promise<void>;
@@ -128,13 +138,8 @@ export async function analyzeRepository(
     }));
     const allParseErrors = [...parseErrors, ...safetyParseErrors];
 
-    const graph = buildGraph(files);
-    await report("clustering", "Grouping files into folder layers");
-    const clusters = clusterByFolder(graph);
-    await report("detecting", "Detecting cycles, dependency hubs, and orphans");
-    const anomalies = detectAnomalies(graph);
-
-    // --- Milestone 2 integration: build RepositoryIR from RawExtraction[] ---
+    // Build the verified knowledge base before analyzers. Both the analyzer
+    // capability checks and Architecture Model consume this canonical input.
     // The IR is built directly from the extraction pipeline's RawExtraction[],
     // preserving real IRParseError data (line, column, severity, reason).
     // On failure, it returns null and the legacy pipeline continues unaffected.
@@ -155,6 +160,26 @@ export async function analyzeRepository(
       parserExtractionResult.extractions,
       hasPythonFiles ? pythonRootConfidence : undefined,
     );
+    const architectureModel = repositoryIR
+      ? buildArchitectureModel(repositoryIR)
+      : null;
+
+    await report("clustering", "Building deterministic architecture boundaries");
+    await report("detecting", "Running capability-aware architecture analyzers");
+    const analyzerRuns = await createBuiltInAnalyzerRegistry().run({
+      files,
+      repositoryIR,
+      architectureModel,
+    });
+    const resultOf = <T,>(id: string): T | undefined =>
+      analyzerRuns.find((run) => run.analyzerId === id)?.result as T | undefined;
+    const graph = resultOf<DependencyGraph>(DEPENDENCY_GRAPH_ANALYZER_ID);
+    const clusters = resultOf<Cluster[]>(FOLDER_CLUSTER_ANALYZER_ID);
+    const anomalies = resultOf<Anomalies>(ANOMALY_ANALYZER_ID);
+    if (!graph || !clusters || !anomalies) {
+      throw new AnalysisError("Required built-in analyzers did not produce output.");
+    }
+    const analysisViews = analyzerRuns.map(toAnalysisView);
 
     await report("layout", "Computing a readable diagram layout");
     const renderData = await prepareRenderData(
@@ -162,6 +187,7 @@ export async function analyzeRepository(
       clusters,
       repositoryIR,
       allParseErrors,
+      architectureModel,
     );
 
     const repoMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
@@ -180,6 +206,8 @@ export async function analyzeRepository(
       // Attach validated IR if construction succeeded.
       // Old analyses without this field still load fine (field is optional).
       ...(repositoryIR ? { repositoryIR } : {}),
+      analysisViews,
+      ...(architectureModel ? { architectureModel } : {}),
     };
     await report("persisting", "Saving the shareable diagram");
     await storage.saveAnalysis(result);

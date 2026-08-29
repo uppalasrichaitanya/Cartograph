@@ -27,6 +27,16 @@ Confidence never increases as data flows through the pipeline. A fifth state, `a
 
 **Structural observations**, each traceable back to the graph that produced it — import cycles, dependency hubs ranked by in-degree, and orphaned files that nothing imports.
 
+Those computations run through an ordered analyzer plugin registry. Analyzers declare the
+parser capabilities they require, degrade or skip honestly when coverage is incomplete, and
+persist a provenance-bearing execution summary. Tier-2 analyzers can consume tier-1 results
+through the shared analysis context; there is deliberately no speculative DAG scheduler.
+
+**A shared Architecture Model** indexes module roots, folder hierarchy, and display regions
+over canonical IR node IDs. The map's folder grouping now reads this model rather than
+recomputing repository boundaries independently. The model is deterministic only: inferred
+layers, domains, and service boundaries are not part of it yet.
+
 **Repository context** — detected primary language, framework (Next.js, Remix, Preact, and others, from config files or `package.json` dependencies), file and folder counts, dependency count, and archive size.
 
 **A workspace to explore it** - search across files, named symbols, and packages; a per-file detail panel; a breadcrumb trail of where you have been; and zoom controls. Symbol selections are shareable and survive refresh.
@@ -52,6 +62,10 @@ functions, classes, constructors, and methods.
 **Python import roots are detected, not assumed.** A declared layout in `pyproject.toml` or `setup.cfg` is used when present. Falling back to a structural guess is recorded as a guess and weakens the confidence of what depends on it, rather than passing itself off as declared.
 
 Adding a language means implementing a parser against the registry interface — not modifying the pipeline.
+
+Adding an analysis means implementing the minimal `Analyzer` contract and registering it in
+an ordered tier. See `lib/analysis/analyzers/interface.ts`; capability requirements and
+dependencies are explicit, and dependencies must come from an earlier tier.
 
 The symbol index is not a call graph. Cartograph does not currently add call or reference
 edges between declarations; dependency geometry remains file-level and import-based.
@@ -113,7 +127,9 @@ The suite includes conformance fixtures per language and determinism checks: the
 ```
 app/                    Next.js App Router — pages and API routes
 components/             Diagram, search, upload, and workspace UI
-lib/analysis/           Discovery, parsing, graph construction, clustering, anomalies
+lib/analysis/           Discovery, parsing, orchestration, and render projection
+lib/analysis/analyzers/ Ordered capability-aware analyzer plugins
+lib/analysis/architecture-model/ Deterministic boundary records and query indexes
 lib/analysis/ir/        Versioned intermediate representation and its validation
 lib/analysis/parsers/   Per-language parsers behind one registry interface
 lib/safety/             Zip validation, content sniffing, resource guards, worker pool

@@ -6,6 +6,8 @@ import {
   projectConfidenceByPath,
 } from "./projectConfidence";
 import type { RepositoryIR } from "./ir/types";
+import { clustersFromArchitectureModel } from "./architecture-model/model";
+import type { ArchitectureModelData } from "./architecture-model/types";
 import { nodeBoxHeight, nodeBoxWidth } from "@/lib/workspace/nodeMetrics";
 import type {
   Cluster,
@@ -95,7 +97,11 @@ export async function prepareRenderData(
   clusters: Cluster[],
   ir: RepositoryIR | null | undefined,
   parseErrors: ReadonlyArray<ParseError>,
+  architectureModel?: ArchitectureModelData | null,
 ): Promise<RenderData> {
+  const displayClusters = architectureModel
+    ? clustersFromArchitectureModel(architectureModel, graph, ir ?? undefined)
+    : clusters;
   const confidenceByPath = projectConfidenceByPath(
     ir,
     graph.nodes.map((node) => node.path),
@@ -118,7 +124,7 @@ export async function prepareRenderData(
   }
 
   const folderView = await layout(
-    clusters.map((cluster) => {
+    displayClusters.map((cluster) => {
       const files = cluster.fileIds;
       // Aggregate only — how many contained files have reduced confidence.
       // The folder's own confidence stays 'derived': the grouping is a
@@ -155,7 +161,7 @@ export async function prepareRenderData(
   const fileViewByFolder: Record<string, RenderGraph> = {};
   const unresolvedByFile = collectUnresolvedImports(ir);
 
-  for (const cluster of clusters) {
+  for (const cluster of displayClusters) {
     const contained = new Set(cluster.fileIds);
     const nodes = graph.nodes.filter((node) => contained.has(node.id));
     const edges: RenderEdge[] = graph.edges
@@ -285,7 +291,7 @@ export async function prepareRenderData(
     // the folder overview: containment is a deterministic computation over
     // verified facts. A collapsed region is not an uncertain one.
     for (const [neighbour, stubId] of boundaryStubIds) {
-      const neighbourCluster = clusters.find((c) => c.name === neighbour);
+      const neighbourCluster = displayClusters.find((c) => c.name === neighbour);
       layoutInputs.push({
         id: stubId,
         label: neighbour,
