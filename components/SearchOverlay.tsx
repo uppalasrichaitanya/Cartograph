@@ -6,6 +6,7 @@ import {
   rankSearchItems,
   type RankedResult,
   type SearchItem,
+  type SearchTarget,
 } from "@/lib/workspace/search";
 import { SearchIcon } from "./Icons";
 
@@ -51,7 +52,7 @@ export function SearchOverlay({
   onClose,
 }: {
   items: ReadonlyArray<SearchItem>;
-  onSelect: (target: string) => void;
+  onSelect: (target: SearchTarget) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -114,7 +115,7 @@ export function SearchOverlay({
         onKeyDown={handleKeyDown}
         role="dialog"
         aria-modal="true"
-        aria-label="Search files and packages"
+        aria-label="Search files, symbols, and packages"
       >
         <div className="search-input-wrap">
           <span className="search-icon"><SearchIcon size={15} /></span>
@@ -122,13 +123,13 @@ export function SearchOverlay({
             ref={inputRef}
             className="search-input"
             type="text"
-            placeholder="Search files and packages…"
+            placeholder="Search files, symbols, and packages…"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
               setActiveIndex(0);
             }}
-            aria-label="Search files and packages"
+            aria-label="Search files, symbols, and packages"
           />
           <span className="search-kbd" aria-hidden="true">Esc</span>
         </div>
@@ -166,8 +167,8 @@ export function SearchOverlay({
               </span>
               {/* Packages are named as such. Without it, a package row and a
                   file row would look alike while meaning different things. */}
-              {result.item.kind === "package" && (
-                <span className="search-result-kind">package</span>
+              {result.item.kind !== "file" && (
+                <span className="search-result-kind">{result.item.kind}</span>
               )}
               <span className="search-result-folder">
                 {result.matchedField === "context" ? (

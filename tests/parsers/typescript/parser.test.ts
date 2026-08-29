@@ -38,7 +38,7 @@ test("TypeScriptParser — properties", async (t) => {
   });
 
   await t.test("declares imports capability", () => {
-    assert.deepEqual([...parser.capabilities], ["imports"]);
+    assert.deepEqual([...parser.capabilities], ["imports", "declarations"]);
   });
 
   await t.test("canHandle returns true for TS/JS extensions", () => {
@@ -76,7 +76,7 @@ test("TypeScriptParser — parseFile basics", async (t) => {
     assert.equal(result.path, "src/index.ts");
     assert.equal(result.lineCount, 4);
     assert.deepEqual(result.parseErrors, []);
-    assert.deepEqual([...result.capabilitiesUsed], ["imports"]);
+    assert.deepEqual([...result.capabilitiesUsed], ["imports", "declarations"]);
     // Both specifiers should be in internalImports at parse time
     // (resolution happens later via resolveImport)
     assert.ok(result.internalImports.includes("./lib/helper"));

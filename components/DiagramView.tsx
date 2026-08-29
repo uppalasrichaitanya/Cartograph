@@ -36,6 +36,7 @@ import {
 } from "@/lib/workspace/position";
 import { cameraMotion, structuralLegDuration } from "@/lib/workspace/motion";
 import { buildSearchItems } from "@/lib/workspace/searchItems";
+import type { SearchTarget } from "@/lib/workspace/search";
 import {
   appendToTrail,
   fileLabel,
@@ -231,7 +232,13 @@ function getConnectedIds(nodeId: string, edges: Edge[]): Set<string> {
 }
 
 /* ─── Inner Diagram (inside ReactFlowProvider) ─── */
-function DiagramInner({ result }: { result: AnalysisResult }) {
+function DiagramInner({
+  result,
+  initialSearch,
+}: {
+  result: AnalysisResult;
+  initialSearch: string;
+}) {
   const router = useRouter();
   /* ─── What the address can refer to ───
    * Regions and files are validated against the repository before a URL value
@@ -245,6 +252,16 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
     () => new Set(result.graph.nodes.map((node) => node.id)),
     [result.graph.nodes],
   );
+  const symbolOwnerById = useMemo(() => {
+    const owners = new Map<string, string>();
+    for (const node of result.repositoryIR?.nodes ?? []) {
+      if (node.kind !== "File") continue;
+      for (const declaration of node.declarations ?? []) {
+        owners.set(declaration.id, node.path);
+      }
+    }
+    return owners;
+  }, [result.repositoryIR]);
 
   /* ─── Initial position, read from the address ───
    * Computed once, before first paint, so arriving via a shared link lands
@@ -253,13 +270,12 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
   const initialPosition = useMemo(
     () =>
       parsePosition(
-        typeof window === "undefined"
-          ? null
-          : new URLSearchParams(window.location.search),
+        new URLSearchParams(initialSearch),
         knownRegions,
         knownFiles,
+        symbolOwnerById,
       ),
-    [knownRegions, knownFiles],
+    [initialSearch, knownRegions, knownFiles, symbolOwnerById],
   );
 
   const [folder, setFolder] = useState<string | null>(initialPosition.region);
@@ -267,6 +283,9 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
     initialPosition.file
       ? result.graph.nodes.find((n) => n.id === initialPosition.file) ?? null
       : null,
+  );
+  const [selectedSymbolId, setSelectedSymbolId] = useState<string | null>(
+    initialPosition.symbol ?? null,
   );
   const [highlightMode, setHighlightMode] = useState<HighlightMode>(
     initialPosition.lens,
@@ -422,6 +441,13 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         : null,
     [selectedFile, result.repositoryIR],
   );
+  const selectedDeclarations = useMemo(() => {
+    if (!selectedFile) return undefined;
+    const fileNode = result.repositoryIR?.nodes.find(
+      (node) => node.kind === "File" && node.path === selectedFile.path,
+    );
+    return fileNode?.kind === "File" ? fileNode.declarations : undefined;
+  }, [selectedFile, result.repositoryIR]);
 
   // Sync nodes/edges when the view changes.
   //
@@ -503,6 +529,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
       const next: WorkspacePosition = {
         region: folder,
         file: selectedFile?.id ?? null,
+        symbol: selectedFile ? selectedSymbolId : null,
         lens: highlightMode,
         camera,
       };
@@ -518,7 +545,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         `${window.location.pathname}${serializePosition(next)}`,
       );
     },
-    [folder, selectedFile, highlightMode, reactFlowInstance],
+    [folder, selectedFile, selectedSymbolId, highlightMode, reactFlowInstance],
   );
 
   // Write on every change of place.
@@ -546,6 +573,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         new URLSearchParams(window.location.search),
         knownRegions,
         knownFiles,
+        symbolOwnerById,
       );
       lastWrittenPosition.current = position;
 
@@ -564,6 +592,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
           ? result.graph.nodes.find((n) => n.id === position.file) ?? null
           : null,
       );
+      setSelectedSymbolId(position.symbol ?? null);
       setHighlightMode(position.lens);
       if (position.camera) {
         // Restored at the tier of the change being undone: structural when
@@ -578,7 +607,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [knownRegions, knownFiles, result.graph.nodes, reactFlowInstance, folder, changeRegion]);
+  }, [knownRegions, knownFiles, symbolOwnerById, result.graph.nodes, reactFlowInstance, folder, changeRegion]);
 
   /* ─── Restore the shared camera once the graph has mounted ───
    *
@@ -743,7 +772,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
 
   /* ─── Navigate to a node: pan camera, highlight, update panel (Issue 1, 2) ─── */
   const navigateToNode = useCallback(
-    (nodeId: string) => {
+    (nodeId: string, symbolId: string | null = null) => {
       // Find the node in the current view.
       const flowNode = reactFlowInstance.getNode(nodeId);
       if (!flowNode) {
@@ -760,6 +789,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         }
         if (graphNode) {
           setSelectedFile(graphNode);
+          setSelectedSymbolId(symbolId);
           recordExamined("file", graphNode.id);
         }
         return;
@@ -784,6 +814,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
       const graphNode = result.graph.nodes.find((n) => n.id === nodeId);
       if (graphNode) {
         setSelectedFile(graphNode);
+        setSelectedSymbolId(symbolId);
         recordExamined("file", graphNode.id);
       }
     },
@@ -805,6 +836,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
       if (node.data.kind === "file" && node.data.filePath) {
         const graphNode = result.graph.nodes.find((file) => file.id === node.data.filePath) ?? null;
         setSelectedFile(graphNode);
+        setSelectedSymbolId(null);
         if (graphNode) recordExamined("file", graphNode.id);
 
         // The map does not resize, so there is no layout transition to wait
@@ -849,13 +881,19 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
 
   /* ─── Search items ─── */
   /* ─── What can be searched ───
-   * Files from the graph, plus external packages read from the IR. Symbols are
-   * excluded: the IR carries no symbol nodes, so offering them would assert
-   * beyond the evidence. */
+   * Files from the graph, plus external packages and parser-observed named
+   * declarations read from the IR. */
   const searchItems = useMemo(
     () => buildSearchItems(result.graph, result.repositoryIR),
     [result.graph, result.repositoryIR],
   );
+
+  const navigateToSearchTarget = useCallback((target: SearchTarget) => {
+    navigateToNode(
+      target.fileId,
+      target.kind === "symbol" ? target.symbolId : null,
+    );
+  }, [navigateToNode]);
 
   /* ─── Closing the inspector ─────────────────────────────────────────────
    *
@@ -874,6 +912,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
   const closePanel = useCallback(() => {
     const { x, y, zoom } = reactFlowInstance.getViewport();
     setSelectedFile(null);
+    setSelectedSymbolId(null);
 
     // Translated directly rather than re-centred.
     //
@@ -1061,7 +1100,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
           type="button"
           className="rail-search"
           onClick={() => setSearchOpen(true)}
-          aria-label="Search files and packages"
+          aria-label="Search files, symbols, and packages"
         >
           <span className="rail-search-icon"><SearchIcon size={14} /></span>
           <span className="rail-search-label">Search</span>
@@ -1290,6 +1329,9 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         file={selectedFile}
         graph={result.graph}
         evidence={selectedEvidence}
+        declarations={selectedDeclarations}
+        selectedSymbolId={selectedSymbolId}
+        onSelectSymbol={setSelectedSymbolId}
         onClose={closePanel}
         onNavigateToFile={navigateToNode}
         onHoverFile={setHoveredFileId}
@@ -1309,8 +1351,8 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
       {searchOpen && (
         <SearchOverlay
           items={searchItems}
-          onSelect={(id) => {
-            navigateToNode(id);
+          onSelect={(target) => {
+            navigateToSearchTarget(target);
             setSearchOpen(false);
           }}
           onClose={() => setSearchOpen(false)}
@@ -1321,10 +1363,16 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
 }
 
 /* ─── Root export wraps in ReactFlowProvider ─── */
-export function DiagramView({ result }: { result: AnalysisResult }) {
+export function DiagramView({
+  result,
+  initialSearch = "",
+}: {
+  result: AnalysisResult;
+  initialSearch?: string;
+}) {
   return (
     <ReactFlowProvider>
-      <DiagramInner result={result} />
+      <DiagramInner result={result} initialSearch={initialSearch} />
     </ReactFlowProvider>
   );
 }

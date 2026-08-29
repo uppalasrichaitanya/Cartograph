@@ -46,6 +46,7 @@ import {
   type PythonPackageIndex,
 } from "./packageIndex";
 import { ensureInitialized, parsePythonSourceSync } from "./treeSitter";
+import { extractPythonDeclarations } from "./declarations";
 import { extractImports } from "./importExtractor";
 import { resolveImport as resolveImportImpl } from "./importResolver";
 
@@ -69,7 +70,7 @@ export class PythonParser implements LanguageParser {
   readonly name = "Python";
   readonly language = "python" as const;
   readonly extensions = ["py"] as const;
-  readonly capabilities = ["imports"] as const;
+  readonly capabilities = ["imports", "declarations"] as const;
 
   // ---- Cached State (set by initialize, cleared by dispose) ----
 
@@ -188,7 +189,8 @@ export class PythonParser implements LanguageParser {
           internalImports: result.specifiers,
           externalImports: [],
           parseErrors: result.parseErrors,
-          capabilitiesUsed: ["imports"],
+          capabilitiesUsed: ["imports", "declarations"],
+          declarations: extractPythonDeclarations(tree),
         };
       } finally {
         // Always free the tree to prevent WASM memory leaks
@@ -209,7 +211,7 @@ export class PythonParser implements LanguageParser {
             reason: "unknown",
           },
         ],
-        capabilitiesUsed: ["imports"],
+        capabilitiesUsed: ["imports", "declarations"],
       };
     }
   }

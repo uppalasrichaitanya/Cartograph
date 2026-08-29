@@ -54,7 +54,7 @@ test("PythonParser: static metadata matches specification", () => {
   assert.equal(parser.name, "Python");
   assert.equal(parser.language, "python");
   assert.deepEqual([...parser.extensions], ["py"]);
-  assert.deepEqual([...parser.capabilities], ["imports"]);
+  assert.deepEqual([...parser.capabilities], ["imports", "declarations"]);
 });
 
 test("PythonParser: canHandle() returns true for .py only", () => {
@@ -449,7 +449,7 @@ test("PythonParser: parseFile() extracts imports", async () => {
     assert.deepEqual([...result.internalImports], ["os", "sys"]);
     assert.deepEqual([...result.externalImports], []);
     assert.deepEqual([...result.parseErrors], []);
-    assert.deepEqual([...result.capabilitiesUsed], ["imports"]);
+    assert.deepEqual([...result.capabilitiesUsed], ["imports", "declarations"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

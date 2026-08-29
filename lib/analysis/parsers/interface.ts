@@ -40,9 +40,11 @@ import type {
   ParserCapability,
   RawExtraction,
   IRParseError,
+  RawDeclaration,
+  SymbolKind,
 } from "../ir/types";
 
-export type { LanguageId, ParserCapability, RawExtraction, IRParseError };
+export type { LanguageId, ParserCapability, RawExtraction, IRParseError, RawDeclaration, SymbolKind };
 
 // ---------------------------------------------------------------------------
 // Parser Initialization Context

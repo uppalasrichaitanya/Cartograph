@@ -89,7 +89,7 @@ test("parseFile: simple import statement", () => {
   assert.deepEqual([...result.externalImports], []);
   assert.deepEqual([...result.parseErrors], []);
   assert.equal(result.path, "app.py");
-  assert.deepEqual([...result.capabilitiesUsed], ["imports"]);
+  assert.deepEqual([...result.capabilitiesUsed], ["imports", "declarations"]);
 });
 
 test("parseFile: dotted import (import foo.bar.baz)", () => {

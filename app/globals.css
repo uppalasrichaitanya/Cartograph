@@ -2055,6 +2055,22 @@ h1, h2, h3, p { margin-top: 0; }
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
 }
+.symbol-list { display: grid; gap: var(--space-1); }
+.symbol-ref {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-2);
+  color: var(--ink-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+.symbol-ref code { color: var(--ink); overflow-wrap: anywhere; }
+.symbol-ref span { font-size: var(--text-micro); color: var(--ink-faint); }
+.symbol-ref:hover { background: var(--focus-wash); }
+.symbol-ref.is-selected { border-color: var(--focus); background: var(--focus-wash); }
 .search-empty { padding: var(--space-5); text-align: center; color: var(--ink-faint); font-size: var(--text-small); }
 .search-count {
   padding: var(--space-2) var(--space-4);

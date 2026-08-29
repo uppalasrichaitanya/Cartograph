@@ -190,6 +190,7 @@ export async function extractAll(
       unresolvedInternalImports: [...unresolvedInternalImports].sort(),
       parseErrors: extraction.parseErrors,
       capabilitiesUsed: extraction.capabilitiesUsed,
+      declarations: extraction.declarations,
     });
   }
 

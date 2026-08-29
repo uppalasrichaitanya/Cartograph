@@ -39,6 +39,9 @@ export type NodeId = string & { readonly __brand: "NodeId" };
  */
 export type EdgeId = string & { readonly __brand: "EdgeId" };
 
+/** Opaque, stable identifier for a named declaration within a file. */
+export type SymbolId = string & { readonly __brand: "SymbolId" };
+
 /**
  * Identifies a supported language. Extended additively per language —
  * adding a value here never removes or renames existing ones.
@@ -150,7 +153,40 @@ export interface Provenance {
  * Used by parsers to honestly declare what they did and didn't extract,
  * and by downstream consumers to know what data is available.
  */
-export type ParserCapability = "imports" | "exports";
+export type ParserCapability = "imports" | "exports" | "declarations";
+
+export type SymbolKind =
+  | "function"
+  | "method"
+  | "constructor"
+  | "class"
+  | "interface"
+  | "type"
+  | "enum";
+
+export interface SourcePosition {
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface SourceRange {
+  readonly start: SourcePosition;
+  readonly end: SourcePosition;
+}
+
+/** Parser-observed named declaration before file identity is projected. */
+export interface RawDeclaration {
+  readonly name: string;
+  readonly qualifiedName: string;
+  readonly kind: SymbolKind;
+  readonly range: SourceRange;
+}
+
+/** Validated declaration embedded in its owning FileNode. */
+export interface Declaration extends RawDeclaration {
+  readonly id: SymbolId;
+  readonly provenance: Provenance;
+}
 
 // ---------------------------------------------------------------------------
 // Nodes
@@ -190,6 +226,8 @@ export interface FileNode {
   readonly parseErrors: ReadonlyArray<IRParseError>;
   /** Which capabilities the parser actually used for this file. */
   readonly capabilitiesUsed: ReadonlyArray<ParserCapability>;
+  /** Absent on analyses created before the symbol index existed. */
+  readonly declarations?: ReadonlyArray<Declaration>;
   readonly provenance: Provenance;
 }
 
@@ -355,6 +393,8 @@ export interface RawExtraction {
   readonly unresolvedInternalImports?: ReadonlyArray<string>;
   readonly parseErrors: ReadonlyArray<IRParseError>;
   readonly capabilitiesUsed: ReadonlyArray<ParserCapability>;
+  /** Present when this parser attempted named-declaration extraction. */
+  readonly declarations?: ReadonlyArray<RawDeclaration>;
 }
 
 /**

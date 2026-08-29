@@ -32,7 +32,9 @@ const item = (
   id: `${kind}:${context}:${label}`,
   label,
   context,
-  target: context,
+  target: kind === "symbol"
+    ? { kind: "symbol", fileId: context, symbolId: label }
+    : { kind, fileId: context },
   kind,
   weight,
 });
@@ -280,15 +282,15 @@ test("Phase 5 — files and external packages, nothing more", async (t) => {
   await t.test("files are labelled by basename, with the path as context", () => {
     // People search for what a file is called; the path disambiguates.
     const items = buildSearchItems(graph, null);
-    const a = items.find((i) => i.target === "src/a.ts");
+    const a = items.find((i) => i.target.fileId === "src/a.ts");
     assert.equal(a?.label, "a.ts");
     assert.equal(a?.context, "src/a.ts");
   });
 
   await t.test("in-degree becomes the tiebreaker weight", () => {
     const items = buildSearchItems(graph, null);
-    assert.equal(items.find((i) => i.target === "src/a.ts")?.weight, 1);
-    assert.equal(items.find((i) => i.target === "src/b.ts")?.weight, 0);
+    assert.equal(items.find((i) => i.target.fileId === "src/a.ts")?.weight, 1);
+    assert.equal(items.find((i) => i.target.fileId === "src/b.ts")?.weight, 0);
   });
 
   await t.test("packages are searchable, once per importer", () => {
@@ -299,7 +301,7 @@ test("Phase 5 — files and external packages, nothing more", async (t) => {
     assert.equal(packages.length, 2);
     assert.ok(packages.every((p) => p.label === "react"));
     assert.deepEqual(
-      packages.map((p) => p.target).sort(),
+      packages.map((p) => p.target.fileId).sort(),
       ["src/a.ts", "src/b.ts"],
     );
   });
@@ -376,8 +378,8 @@ test("Phase 5 — package targets are ordinary graph nodes", async (t) => {
   await t.test("every target resolves to a graph node, whatever the kind", () => {
     for (const searchItem of items) {
       assert.ok(
-        nodeIds.has(searchItem.target),
-        `${searchItem.kind} "${searchItem.label}" targets "${searchItem.target}", which is not a node`,
+        nodeIds.has(searchItem.target.fileId),
+        `${searchItem.kind} "${searchItem.label}" targets "${searchItem.target.fileId}", which is not a node`,
       );
     }
   });
@@ -385,15 +387,15 @@ test("Phase 5 — package targets are ordinary graph nodes", async (t) => {
   await t.test("a package targets its importer, never itself", () => {
     const pkg = items.find((i) => i.kind === "package");
     assert.ok(pkg);
-    assert.equal(pkg!.target, "src/ui/x.ts");
-    assert.notEqual(pkg!.target, pkg!.label, "the package name is not a place");
+    assert.equal(pkg!.target.fileId, "src/ui/x.ts");
+    assert.notEqual(pkg!.target.fileId, pkg!.label, "the package name is not a place");
   });
 
   await t.test("a package target can lie outside the current region", () => {
     // The case the Phase 5 defect broke: selecting this from src/core must
     // move region AND keep the selection.
     const pkg = items.find((i) => i.kind === "package");
-    const targetNode = twoRegionGraph.nodes.find((n) => n.id === pkg!.target);
+    const targetNode = twoRegionGraph.nodes.find((n) => n.id === pkg!.target.fileId);
     assert.equal(targetNode?.folder, "src/ui");
     assert.notEqual(targetNode?.folder, "src/core");
   });
@@ -404,6 +406,6 @@ test("Phase 5 — package targets are ordinary graph nodes", async (t) => {
     const file = items.find((i) => i.kind === "file")!;
     const pkg = items.find((i) => i.kind === "package")!;
     assert.equal(typeof file.target, typeof pkg.target);
-    assert.ok(nodeIds.has(file.target) && nodeIds.has(pkg.target));
+    assert.ok(nodeIds.has(file.target.fileId) && nodeIds.has(pkg.target.fileId));
   });
 });

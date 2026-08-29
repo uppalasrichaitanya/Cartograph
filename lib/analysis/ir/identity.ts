@@ -19,7 +19,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { EdgeId, EdgeKind, NodeId } from "./types";
+import type { EdgeId, EdgeKind, NodeId, SymbolId, SymbolKind } from "./types";
 
 // ---------------------------------------------------------------------------
 // Base62 Encoding
@@ -102,6 +102,22 @@ export function createNodeId(
   relativePath: string,
 ): NodeId {
   return deriveId(rootFingerprint + ":" + relativePath) as NodeId;
+}
+
+/**
+ * Derive symbol identity without source positions so inserting lines does not
+ * rename a declaration. The ordinal distinguishes repeated declarations with
+ * the same kind and qualified name in deterministic source order.
+ */
+export function createSymbolId(
+  fileId: NodeId,
+  kind: SymbolKind,
+  qualifiedName: string,
+  sameNameOrdinal: number,
+): SymbolId {
+  return deriveId(
+    `${fileId}:symbol:${kind}:${qualifiedName}:${sameNameOrdinal}`,
+  ) as SymbolId;
 }
 
 /**

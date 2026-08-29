@@ -1,18 +1,18 @@
 /**
  * Search Items — what the workspace can be searched over
  *
- * Two kinds, and deliberately only two:
+ * Three kinds:
  *
  *   files     every source file in the repository
  *   packages  external dependencies, read from the IR
+ *   symbols   named declarations, read from FileNodes in the IR
  *
  * Packages are included because "who uses react?" is a question the IR can
  * already answer from directly observed import statements, and the workspace
  * previously could not. Search covered file paths and folder names only.
  *
- * Symbols are NOT searchable. Parser capabilities are 'imports' and 'exports',
- * and the IR carries no symbol nodes — offering symbol search would be
- * asserting beyond the evidence.
+ * Symbols remain embedded in files rather than becoming graph nodes. Their
+ * structured targets carry both the owning file and declaration identity.
  *
  * @module lib/workspace/searchItems
  */
@@ -61,7 +61,7 @@ export function buildSearchItems(
     id: `file:${node.id}`,
     label: basename(node.path),
     context: node.path,
-    target: node.id,
+    target: { kind: "file" as const, fileId: node.id },
     kind: "file" as const,
     weight: inDegree.get(node.id) ?? 0,
   }));
@@ -74,6 +74,25 @@ export function buildSearchItems(
     if (node.kind === "File") filePathById.set(node.id, node.path);
     else if (node.kind === "ExternalDependency") {
       packageNameById.set(node.id, node.name);
+    }
+  }
+
+  for (const node of ir.nodes) {
+    if (node.kind !== "File" || node.declarations === undefined) continue;
+    const weight = inDegree.get(node.path) ?? 0;
+    for (const declaration of node.declarations) {
+      items.push({
+        id: `symbol:${declaration.id}`,
+        label: declaration.name,
+        context: `${declaration.qualifiedName} in ${node.path}`,
+        target: {
+          kind: "symbol",
+          fileId: node.path,
+          symbolId: declaration.id,
+        },
+        kind: "symbol",
+        weight,
+      });
     }
   }
 
@@ -90,7 +109,7 @@ export function buildSearchItems(
       context: importerPath,
       // The destination is the importing file: that is the thing in the map a
       // person can actually be taken to.
-      target: importerPath,
+      target: { kind: "package", fileId: importerPath },
       kind: "package",
       // Weighted by how depended-upon the IMPORTER is, keeping the tiebreaker
       // consistent across both kinds — it always means "how much of this

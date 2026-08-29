@@ -16,6 +16,7 @@
 
 import type {
   Edge,
+  Declaration,
   EdgeKind,
   ExternalDependencyNode,
   FileNode,
@@ -28,6 +29,7 @@ import type {
   ProvenanceOrigin,
   RepositoryIR,
   RootConfidence,
+  SymbolKind,
   UnresolvedImportNode,
 } from "./types";
 
@@ -70,7 +72,10 @@ const VALID_PROVENANCE_ORIGINS: readonly ProvenanceOrigin[] = [
   "user-defined",
   "ai-interpretation",
 ];
-const VALID_CAPABILITIES: readonly ParserCapability[] = ["imports", "exports"];
+const VALID_CAPABILITIES: readonly ParserCapability[] = ["imports", "exports", "declarations"];
+const VALID_SYMBOL_KINDS: readonly SymbolKind[] = [
+  "function", "method", "constructor", "class", "interface", "type", "enum",
+];
 const VALID_ROOT_CONFIDENCES: readonly RootConfidence[] = [
   "declared",
   "structural-heuristic",
@@ -114,6 +119,13 @@ function assertNonNegativeInteger(value: unknown, path: string): number {
       path,
       `expected a non-negative integer, got ${String(value)}`,
     );
+  }
+  return value;
+}
+
+function assertPositiveInteger(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new IRValidationError(path, `expected a positive integer, got ${String(value)}`);
   }
   return value;
 }
@@ -198,6 +210,35 @@ export function validateParseError(
   };
 }
 
+function validateDeclaration(value: unknown, path: string): Declaration {
+  const obj = assertObject(value, path);
+  const range = assertObject(obj.range, `${path}.range`);
+  const start = assertObject(range.start, `${path}.range.start`);
+  const end = assertObject(range.end, `${path}.range.end`);
+  const startPosition = {
+    line: assertPositiveInteger(start.line, `${path}.range.start.line`),
+    column: assertPositiveInteger(start.column, `${path}.range.start.column`),
+  };
+  const endPosition = {
+    line: assertPositiveInteger(end.line, `${path}.range.end.line`),
+    column: assertPositiveInteger(end.column, `${path}.range.end.column`),
+  };
+  if (
+    endPosition.line < startPosition.line ||
+    (endPosition.line === startPosition.line && endPosition.column < startPosition.column)
+  ) {
+    throw new IRValidationError(`${path}.range`, "end must not precede start");
+  }
+  return {
+    id: assertNonEmptyString(obj.id, `${path}.id`),
+    name: assertNonEmptyString(obj.name, `${path}.name`),
+    qualifiedName: assertNonEmptyString(obj.qualifiedName, `${path}.qualifiedName`),
+    kind: assertEnum(obj.kind, `${path}.kind`, VALID_SYMBOL_KINDS),
+    range: { start: startPosition, end: endPosition },
+    provenance: validateProvenance(obj.provenance, `${path}.provenance`),
+  } as Declaration;
+}
+
 /** Validate a FileNode structure. */
 export function validateFileNode(
   value: unknown,
@@ -205,12 +246,43 @@ export function validateFileNode(
 ): FileNode {
   const obj = assertObject(value, path);
   const kind = assertEnum(obj.kind, `${path}.kind`, ["File"] as const);
+  const lineCount = assertNonNegativeInteger(obj.lineCount, `${path}.lineCount`);
+  const declarations = obj.declarations === undefined
+    ? undefined
+    : assertArray(obj.declarations, `${path}.declarations`).map((item, i) =>
+        validateDeclaration(item, `${path}.declarations[${i}]`),
+      );
+  if (declarations) {
+    const ids = new Set<string>();
+    for (let i = 0; i < declarations.length; i++) {
+      const declaration = declarations[i];
+      if (ids.has(declaration.id)) {
+        throw new IRValidationError(`${path}.declarations[${i}].id`, `duplicate symbol ID '${declaration.id}'`);
+      }
+      ids.add(declaration.id);
+      if (declaration.range.end.line > lineCount) {
+        throw new IRValidationError(
+          `${path}.declarations[${i}].range.end.line`,
+          `must not exceed file line count ${lineCount}`,
+        );
+      }
+      if (i > 0) {
+        const previous = declarations[i - 1];
+        const outOfOrder = declaration.range.start.line < previous.range.start.line ||
+          (declaration.range.start.line === previous.range.start.line &&
+            declaration.range.start.column < previous.range.start.column);
+        if (outOfOrder) {
+          throw new IRValidationError(`${path}.declarations[${i}].range.start`, "declarations must be in source order");
+        }
+      }
+    }
+  }
   return {
     id: assertNonEmptyString(obj.id, `${path}.id`),
     kind,
     path: assertNonEmptyString(obj.path, `${path}.path`),
     language: assertEnum(obj.language, `${path}.language`, VALID_LANGUAGES),
-    lineCount: assertNonNegativeInteger(obj.lineCount, `${path}.lineCount`),
+    lineCount,
     ownerRootId: assertNonEmptyString(
       obj.ownerRootId,
       `${path}.ownerRootId`,
@@ -232,6 +304,7 @@ export function validateFileNode(
         VALID_CAPABILITIES,
       ),
     ),
+    declarations,
     provenance: validateProvenance(obj.provenance, `${path}.provenance`),
   } as unknown as FileNode;
 }
@@ -395,6 +468,22 @@ export function validateRepositoryIR(value: unknown): RepositoryIR {
       );
     }
     nodeIdSet.add(nodes[i].id);
+  }
+
+  const symbolIdSet = new Set<string>();
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.kind !== "File") continue;
+    for (let j = 0; j < (node.declarations?.length ?? 0); j++) {
+      const symbol = node.declarations![j];
+      if (symbolIdSet.has(symbol.id)) {
+        throw new IRValidationError(
+          `ir.nodes[${i}].declarations[${j}].id`,
+          `duplicate symbol ID '${symbol.id}'`,
+        );
+      }
+      symbolIdSet.add(symbol.id);
+    }
   }
 
   // 2. No duplicate edge IDs

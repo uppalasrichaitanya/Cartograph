@@ -29,7 +29,7 @@ Confidence never increases as data flows through the pipeline. A fifth state, `a
 
 **Repository context** — detected primary language, framework (Next.js, Remix, Preact, and others, from config files or `package.json` dependencies), file and folder counts, dependency count, and archive size.
 
-**A workspace to explore it** — full-text search across files and folders, a per-file detail panel, a breadcrumb trail of where you have been, and zoom controls.
+**A workspace to explore it** - search across files, named symbols, and packages; a per-file detail panel; a breadcrumb trail of where you have been; and zoom controls. Symbol selections are shareable and survive refresh.
 
 Files that could not be fully parsed are reported alongside the map instead of being silently omitted.
 
@@ -42,11 +42,19 @@ Files that could not be fully parsed are reported alongside the map instead of b
 | TypeScript / JavaScript | `.ts` `.tsx` `.js` `.jsx` | TypeScript compiler API |
 | Python | `.py` | `tree-sitter-python` (WASM) |
 
+Both parsers also index named declarations. TypeScript/JavaScript support functions, named
+function or arrow expressions assigned to variables, classes, constructors, methods,
+interfaces, type aliases, and enums. Python supports functions, async functions, nested
+functions, classes, constructors, and methods.
+
 **Path aliases are honoured.** `baseUrl` and `paths` from `tsconfig.json` or `jsconfig.json` are resolved, so `@/lib/thing` becomes a real edge instead of an unresolved stub. Re-exports are followed.
 
 **Python import roots are detected, not assumed.** A declared layout in `pyproject.toml` or `setup.cfg` is used when present. Falling back to a structural guess is recorded as a guess and weakens the confidence of what depends on it, rather than passing itself off as declared.
 
 Adding a language means implementing a parser against the registry interface — not modifying the pipeline.
+
+The symbol index is not a call graph. Cartograph does not currently add call or reference
+edges between declarations; dependency geometry remains file-level and import-based.
 
 ---
 

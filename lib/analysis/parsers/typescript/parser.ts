@@ -43,6 +43,7 @@ import {
   buildFileLookupMap,
   type AliasConfig,
 } from "./resolve";
+import { extractTypeScriptDeclarations } from "./declarations";
 
 // ---------------------------------------------------------------------------
 // AST Walking
@@ -140,7 +141,7 @@ export class TypeScriptParser implements LanguageParser {
   readonly name = "TypeScript/JavaScript";
   readonly language = "typescript" as const;
   readonly extensions = ["ts", "tsx", "js", "jsx"] as const;
-  readonly capabilities = ["imports"] as const;
+  readonly capabilities = ["imports", "declarations"] as const;
 
   /** Alias config read during initialize(). Cleared on dispose(). */
   private aliasConfig: AliasConfig | null = null;
@@ -190,7 +191,8 @@ export class TypeScriptParser implements LanguageParser {
           internalImports: [],
           externalImports: [],
           parseErrors: diagnosticsToParseErrors(diagnostics, sourceFile),
-          capabilitiesUsed: ["imports"],
+          capabilitiesUsed: ["imports", "declarations"],
+          declarations: extractTypeScriptDeclarations(sourceFile),
         };
       }
 
@@ -202,7 +204,8 @@ export class TypeScriptParser implements LanguageParser {
         lineCount: content.split(/\r?\n/).length,
         internalImports: specifiers,
         externalImports: [],
-        capabilitiesUsed: ["imports"],
+        capabilitiesUsed: ["imports", "declarations"],
+        declarations: extractTypeScriptDeclarations(sourceFile),
         parseErrors: [],
       };
     } catch (error) {
@@ -220,7 +223,7 @@ export class TypeScriptParser implements LanguageParser {
             reason: "unknown",
           },
         ],
-        capabilitiesUsed: ["imports"],
+        capabilitiesUsed: ["imports", "declarations"],
       };
     }
   }

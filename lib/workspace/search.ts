@@ -40,7 +40,12 @@ const TIER_WEIGHT: Record<MatchTier, number> = {
  */
 const CONTEXT_PENALTY = 150;
 
-export type SearchItemKind = "file" | "package";
+export type SearchItemKind = "file" | "package" | "symbol";
+
+export type SearchTarget =
+  | { readonly kind: "file"; readonly fileId: string }
+  | { readonly kind: "package"; readonly fileId: string }
+  | { readonly kind: "symbol"; readonly fileId: string; readonly symbolId: string };
 
 export type SearchItem = {
   /** Stable identity for this result row. */
@@ -53,7 +58,7 @@ export type SearchItem = {
    * Node id to navigate to. Differs from `id` for packages: a package has no
    * location in the map, so the destination is the file that imports it.
    */
-  readonly target: string;
+  readonly target: SearchTarget;
   readonly kind: SearchItemKind;
   /**
    * Structural tiebreaker — how many files depend on this. A verified count,
@@ -172,7 +177,8 @@ export function rankSearchItems(
   const trimmed = query.trim();
 
   if (!trimmed) {
-    const byWeight = [...items]
+    const byWeight = items
+      .filter((item) => item.kind !== "symbol")
       .sort((a, b) => b.weight - a.weight || a.label.localeCompare(b.label))
       .slice(0, limit)
       .map(

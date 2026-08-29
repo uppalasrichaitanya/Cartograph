@@ -23,6 +23,7 @@ import {
   createModuleRootId,
   createNodeId,
   createRootFingerprint,
+  createSymbolId,
   createUnresolvedImportId,
 } from "./identity";
 import type {
@@ -132,6 +133,18 @@ export class IRBuilder implements IRBuilderContract {
         }
       : { origin: "verified" };
 
+    const sameNameCounts = new Map<string, number>();
+    const declarations = raw.declarations?.map((declaration) => {
+      const key = `${declaration.kind}\0${declaration.qualifiedName}`;
+      const ordinal = sameNameCounts.get(key) ?? 0;
+      sameNameCounts.set(key, ordinal + 1);
+      return {
+        ...declaration,
+        id: createSymbolId(id, declaration.kind, declaration.qualifiedName, ordinal),
+        provenance,
+      };
+    });
+
     return {
       id,
       kind: "File",
@@ -142,6 +155,7 @@ export class IRBuilder implements IRBuilderContract {
       confidence,
       parseErrors: [...raw.parseErrors],
       capabilitiesUsed: [...raw.capabilitiesUsed],
+      declarations,
       provenance,
     };
   }

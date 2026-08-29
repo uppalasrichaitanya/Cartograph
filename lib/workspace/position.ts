@@ -66,6 +66,8 @@ export type WorkspacePosition = {
   readonly region: string | null;
   /** Selected file path, or null. */
   readonly file: string | null;
+  /** Selected declaration within the file, when one is focused. */
+  readonly symbol?: string | null;
   /** Active observation lens, or null. */
   readonly lens: LensValue | null;
   /**
@@ -81,6 +83,7 @@ export type WorkspacePosition = {
 export const EMPTY_POSITION: WorkspacePosition = {
   region: null,
   file: null,
+  symbol: null,
   lens: null,
   camera: null,
 };
@@ -88,6 +91,7 @@ export const EMPTY_POSITION: WorkspacePosition = {
 const PARAM = {
   region: "region",
   file: "file",
+  symbol: "symbol",
   lens: "lens",
   camera: "cam",
 } as const;
@@ -143,6 +147,7 @@ export function parsePosition(
   params: URLSearchParams | null | undefined,
   knownRegions: ReadonlySet<string>,
   knownFiles: ReadonlySet<string>,
+  symbolOwnerById: ReadonlyMap<string, string> = new Map(),
 ): WorkspacePosition {
   if (!params) return EMPTY_POSITION;
 
@@ -160,9 +165,15 @@ export function parsePosition(
     if (looksContained) file = null;
   }
 
+  const rawSymbol = params.get(PARAM.symbol);
+  const symbol = file && rawSymbol && symbolOwnerById.get(rawSymbol) === file
+    ? rawSymbol
+    : null;
+
   return {
     region,
     file,
+    symbol,
     lens: parseLens(params.get(PARAM.lens)),
     camera: parseCamera(params.get(PARAM.camera)),
   };
@@ -179,6 +190,7 @@ export function serializePosition(position: WorkspacePosition): string {
   const params = new URLSearchParams();
   if (position.region) params.set(PARAM.region, position.region);
   if (position.file) params.set(PARAM.file, position.file);
+  if (position.file && position.symbol) params.set(PARAM.symbol, position.symbol);
   if (position.lens) params.set(PARAM.lens, position.lens);
   if (position.camera) params.set(PARAM.camera, formatCamera(position.camera));
   const query = params.toString();
@@ -196,7 +208,12 @@ export function samePosition(
   a: WorkspacePosition,
   b: WorkspacePosition,
 ): boolean {
-  if (a.region !== b.region || a.file !== b.file || a.lens !== b.lens) {
+  if (
+    a.region !== b.region ||
+    a.file !== b.file ||
+    (a.symbol ?? null) !== (b.symbol ?? null) ||
+    a.lens !== b.lens
+  ) {
     return false;
   }
   if (!a.camera && !b.camera) return true;
@@ -220,6 +237,7 @@ export function isNavigation(
   return (
     from.region !== to.region ||
     from.file !== to.file ||
+    (from.symbol ?? null) !== (to.symbol ?? null) ||
     from.lens !== to.lens
   );
 }

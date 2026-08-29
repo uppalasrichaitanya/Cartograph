@@ -1,6 +1,7 @@
 "use client";
 
 import type { FileEvidence } from "@/lib/analysis/projectConfidence";
+import type { Declaration } from "@/lib/analysis/ir/types";
 import type { GraphNode, DependencyGraph } from "@/types/graph";
 import { CloseIcon } from "./Icons";
 
@@ -8,6 +9,9 @@ export function FileDetailPanel({
   file,
   graph,
   evidence,
+  declarations,
+  selectedSymbolId,
+  onSelectSymbol,
   interpretation,
   onClose,
   onNavigateToFile,
@@ -21,6 +25,10 @@ export function FileDetailPanel({
    * the panel stays silent rather than implying full confidence.
    */
   evidence: FileEvidence | null;
+  /** Undefined means no symbol index; an empty array means indexed, with none. */
+  declarations?: ReadonlyArray<Declaration>;
+  selectedSymbolId: string | null;
+  onSelectSymbol: (symbolId: string) => void;
   /**
    * Generated interpretation, when one exists. Nothing produces this yet.
    * Typed and threaded now so the surface that displays it is established
@@ -70,6 +78,31 @@ export function FileDetailPanel({
         <div><dt>Folder</dt><dd>{file.folder}</dd></div>
         <div><dt>External packages</dt><dd>{file.externalImports.length}</dd></div>
       </dl>
+
+      {declarations !== undefined && (
+        <section>
+          <h3>Symbols <span>{declarations.length}</span></h3>
+          {declarations.length ? (
+            <ul className="symbol-list">
+              {declarations.map((declaration) => (
+                <li key={declaration.id}>
+                  <button
+                    type="button"
+                    className={`symbol-ref ${selectedSymbolId === declaration.id ? "is-selected" : ""}`}
+                    onClick={() => onSelectSymbol(declaration.id)}
+                    aria-current={selectedSymbolId === declaration.id ? "true" : undefined}
+                  >
+                    <code>{declaration.qualifiedName}</code>
+                    <span>{declaration.kind} · line {declaration.range.start.line}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="empty-copy">No named declarations.</p>
+          )}
+        </section>
+      )}
 
       {/* Resolved Imports — now interactive (Issue 2) */}
       <section>
