@@ -64,11 +64,6 @@ export function SearchOverlay({
     [items, query],
   );
 
-  // Reset the cursor whenever the result set changes.
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [results]);
-
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -129,7 +124,10 @@ export function SearchOverlay({
             type="text"
             placeholder="Search files and packages…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
             aria-label="Search files and packages"
           />
           <span className="search-kbd" aria-hidden="true">Esc</span>

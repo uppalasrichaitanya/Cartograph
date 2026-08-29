@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { sniffContent } from "../../lib/safety/contentSniff";
 
-test("ContentSniff - Binary detection accuracy (Null bytes)", (t) => {
+test("ContentSniff - Binary detection accuracy (Null bytes)", () => {
   const buf = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x77]); // "hello\0w"
   assert.equal(sniffContent(buf).readable, false);
   assert.equal(sniffContent(buf).reason, "binary");
 });
 
-test("ContentSniff - Binary detection accuracy (Non-printable ratio)", (t) => {
+test("ContentSniff - Binary detection accuracy (Non-printable ratio)", () => {
   const buf = Buffer.alloc(100, 0x20); // 100 spaces
   // add 11 non-printable chars
   for (let i = 0; i < 11; i++) buf[i] = 0x01;
@@ -20,7 +20,7 @@ test("ContentSniff - Binary detection accuracy (Non-printable ratio)", (t) => {
   assert.equal(sniffContent(bufSafe).readable, true);
 });
 
-test("ContentSniff - Invalid Encoding (UTF-8 Replacements)", (t) => {
+test("ContentSniff - Invalid Encoding (UTF-8 Replacements)", () => {
   // Create a buffer with invalid utf-8 sequences
   const buf = Buffer.alloc(100, 0x20);
   for (let i = 0; i < 10; i++) buf[i] = 0xff; // Invalid utf-8 byte
@@ -33,23 +33,23 @@ test("ContentSniff - Invalid Encoding (UTF-8 Replacements)", (t) => {
   assert.equal(sniffContent(bufSafe).readable, true);
 });
 
-test("ContentSniff - Unicode Source Files", (t) => {
+test("ContentSniff - Unicode Source Files", () => {
   const buf = Buffer.from("const foo = '你好，世界'; console.log(foo);", "utf-8");
   assert.equal(sniffContent(buf).readable, true);
 });
 
-test("ContentSniff - Empty Files", (t) => {
+test("ContentSniff - Empty Files", () => {
   const buf = Buffer.from("");
   assert.equal(sniffContent(buf).readable, false);
   assert.equal(sniffContent(buf).reason, "empty");
 });
 
-test("ContentSniff - Very Small Files", (t) => {
+test("ContentSniff - Very Small Files", () => {
   const buf = Buffer.from("a");
   assert.equal(sniffContent(buf).readable, true);
 });
 
-test("ContentSniff - Files with BOM", (t) => {
+test("ContentSniff - Files with BOM", () => {
   const buf = Buffer.concat([
     Buffer.from([0xef, 0xbb, 0xbf]), // UTF-8 BOM
     Buffer.from("const a = 1;", "utf-8")
@@ -57,7 +57,7 @@ test("ContentSniff - Files with BOM", (t) => {
   assert.equal(sniffContent(buf).readable, true);
 });
 
-test("ContentSniff - False negatives on common binary formats", (t) => {
+test("ContentSniff - False negatives on common binary formats", () => {
   // PNG Header
   const pngBuf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   // 0x89 is not valid utf-8, but it's only 1 char? No wait, textdecoder might convert.
@@ -78,7 +78,7 @@ test("ContentSniff - False negatives on common binary formats", (t) => {
   assert.equal(sniffContent(realPng).reason, "binary");
 });
 
-test("ContentSniff - Minified JavaScript", (t) => {
+test("ContentSniff - Minified JavaScript", () => {
   // Minified JS has no newlines, long lines, maybe some unicode. No control chars usually.
   const buf = Buffer.from("const a=1;const b=2;console.log(a+b);".repeat(100), "utf-8");
   assert.equal(sniffContent(buf).readable, true);

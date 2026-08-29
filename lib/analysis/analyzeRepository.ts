@@ -14,7 +14,8 @@ import { TypeScriptParser } from "./parsers/typescript/parser";
 import { PythonParser } from "./parsers/python/parser";
 import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
-import { getStorage } from "@/lib/storage";
+import { getStorage, isUsingBlobStorage, StorageError } from "@/lib/storage";
+import { isValidUploadReference } from "@/lib/storage/uploadReference";
 import { buildRepositoryIR } from "./ir/bridge";
 import type { RootConfidence } from "./ir/types";
 import type { AnalysisResult } from "@/types/graph";
@@ -37,6 +38,11 @@ export async function analyzeRepository(
   const options: AnalysisOptions =
     typeof optionsOrPath === "string" ? { zipPath: optionsOrPath } : optionsOrPath;
   const { zipPath, repoName = "Untitled Repository", repoSizeBytes = null } = options;
+
+  const storageMode = isUsingBlobStorage() ? "blob" : "local";
+  if (!isValidUploadReference(zipPath, storageMode)) {
+    throw new StorageError("The upload reference is invalid or is not owned by Cartograph.");
+  }
 
   const storage = getStorage();
 
@@ -69,7 +75,7 @@ export async function analyzeRepository(
     // safeUnzip now returns an ExtractionResult with per-entry details.
     // The event log captures path rejections, symlink rejections, and
     // content-unreadable events during extraction.
-    const extractionResult = await safeUnzip(localZipPath, extractionDirectory, undefined, eventLog);
+    await safeUnzip(localZipPath, extractionDirectory, undefined, eventLog);
 
     const projectRoot = await findProjectRoot(extractionDirectory);
 

@@ -1,20 +1,13 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTypeScript from "eslint-config-next/typescript";
 
 const config = [
   // Exclude build artifacts and generated files from linting
   {
     ignores: [".next/**", "out/**", "node_modules/**", "next-env.d.ts"],
   },
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextVitals,
+  ...nextTypeScript,
   // Downgrade pre-existing noisy rules to warnings for RC1.
   // These flag hundreds of patterns across the codebase that
   // are too risky to bulk-fix before the first stable release.

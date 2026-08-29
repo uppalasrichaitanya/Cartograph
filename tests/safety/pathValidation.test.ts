@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { validateExtractionPath, isSymlinkEntry } from "../../lib/safety/pathValidation";
 
-test("PathValidation - Path Traversal Prevention", (t) => {
+test("PathValidation - Path Traversal Prevention", () => {
   const root = path.resolve("/extraction/root");
   
   assert.equal(validateExtractionPath("../../etc/passwd", root).safe, false);
@@ -16,7 +16,7 @@ test("PathValidation - Path Traversal Prevention", (t) => {
   assert.equal(validateExtractionPath("\0", root).safe, false);
 });
 
-test("PathValidation - Absolute Path Rejection", (t) => {
+test("PathValidation - Absolute Path Rejection", () => {
   const root = path.resolve("/extraction/root");
   
   // POSIX
@@ -47,30 +47,30 @@ test("PathValidation - Absolute Path Rejection", (t) => {
   }
 });
 
-test("PathValidation - Prefix Bypass Attacks", (t) => {
+test("PathValidation - Prefix Bypass Attacks", () => {
   const root = path.resolve("/extraction/root");
   assert.equal(validateExtractionPath("../root2", root).safe, false);
 });
 
-test("PathValidation - Mixed Separator Attacks", (t) => {
+test("PathValidation - Mixed Separator Attacks", () => {
   const root = path.resolve("/extraction/root");
   assert.equal(validateExtractionPath("foo\\..\\..\\outside", root).safe, false);
   assert.equal(validateExtractionPath("foo/..\\../outside", root).safe, false);
 });
 
-test("PathValidation - Normalization Correctness", (t) => {
+test("PathValidation - Normalization Correctness", () => {
   const root = path.resolve("/extraction/root");
   const res = validateExtractionPath("src/./foo/../index.ts", root);
   assert.equal(res.safe, true);
   assert.equal(res.resolvedPath, path.resolve(root, "src/index.ts"));
 });
 
-test("PathValidation - Cross-platform behavior", (t) => {
+test("PathValidation - Cross-platform behavior", () => {
   const root = path.resolve("/extraction/root");
   assert.equal(validateExtractionPath("C:\\Windows", root).safe, false);
 });
 
-test("PathValidation - Symlink detection correctness", (t) => {
+test("PathValidation - Symlink detection correctness", () => {
   assert.equal(isSymlinkEntry(0o120000 << 16), true);
   assert.equal(isSymlinkEntry((0o120000 << 16) | 0o777), true); 
   assert.equal(isSymlinkEntry(0o100644 << 16), false); 

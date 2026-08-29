@@ -230,14 +230,13 @@ export class PythonParser implements LanguageParser {
    *
    * @param specifier  - Raw import specifier as written in source code
    * @param fromFile   - The file containing the import
-   * @param _knownFiles - All discovered project files (unused — resolution
-   *                      uses the PythonPackageIndex, not the file list)
    */
   resolveImport(
     specifier: string,
     fromFile: ParseFileInput,
-    _knownFiles: ReadonlyArray<ParseFileInput>,
+    knownFiles: ReadonlyArray<ParseFileInput>,
   ): ResolvedSpecifier {
+    void knownFiles;
     if (!this.packageIndex || !this.projectRoot) {
       // Not initialized — classify everything as external.
       // This should never happen if the lifecycle is followed correctly.

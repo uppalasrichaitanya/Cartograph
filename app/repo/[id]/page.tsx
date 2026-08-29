@@ -6,11 +6,12 @@ export const dynamic = "force-dynamic";
 
 export default async function RepositoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  let result;
   try {
-    const result = await getStorage().loadAnalysis(id);
-    if (!result) notFound();
-    return <DiagramView result={result} />;
+    result = await getStorage().loadAnalysis(id);
   } catch {
     notFound();
   }
+  if (!result) notFound();
+  return <DiagramView result={result} />;
 }

@@ -187,9 +187,9 @@ test("Phase 8 — no ad-hoc colour survives in the rules", () => {
 /* ─── Type ───────────────────────────────────────────────────────────────── */
 
 test("Phase 8 — two typefaces, loaded and self-hosted", () => {
-  assert.match(LAYOUT, /IBM_Plex_Sans/);
-  assert.match(LAYOUT, /IBM_Plex_Mono/);
-  assert.match(LAYOUT, /next\/font\/google/);
+  assert.match(LAYOUT, /@fontsource\/ibm-plex-sans\/latin-400\.css/);
+  assert.match(LAYOUT, /@fontsource\/ibm-plex-mono\/latin-400\.css/);
+  assert.doesNotMatch(LAYOUT, /next\/font\/google/);
   // Arial was not merely a default; it cannot disambiguate 0/O or 1/l/I,
   // which is disqualifying for a product whose primary content is paths.
   assert.ok(!CSS.includes("Arial"), "Arial should be gone");

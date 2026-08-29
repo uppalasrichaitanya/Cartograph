@@ -181,13 +181,13 @@
 
   /* The loaded faces, with a stack behind them.
    *
-   * next/font defines --font-sans and --font-mono on <html>, so these read
-   * those and append fallbacks for the window before the webfont resolves
-   * and for the case where it fails entirely. The fallback for mono is a real
+   * Fontsource packages both IBM Plex faces with the application. The
+   * fallbacks cover the window before the webfont resolves and the case where
+   * it fails entirely. The fallback for mono is a real
    * monospace stack, never a proportional face: a path set in a proportional
    * face stops being comparable character by character. */
-  --type-sans: var(--font-sans), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
-  --type-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --type-sans: "IBM Plex Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --type-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* ─── Spacing ─────────────────────────────────────────────────────────
    *

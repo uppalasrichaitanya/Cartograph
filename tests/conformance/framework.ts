@@ -27,7 +27,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { LanguageParser, ParseFileInput, ParserInitContext } from "@/lib/analysis/parsers/interface";
+import type { LanguageParser, ParseFileInput } from "@/lib/analysis/parsers/interface";
 import { extractAll, toLegacyResult } from "@/lib/analysis/extractAll";
 import { ParserRegistry } from "@/lib/analysis/parsers/registry";
 

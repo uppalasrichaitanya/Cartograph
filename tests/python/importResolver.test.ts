@@ -545,7 +545,7 @@ describe("firstSegmentMatchesKnownPackage", () => {
 
 describe("PythonParser.resolveImport() integration", () => {
   test("resolves absolute import through parser", async () => {
-    const { root, index } = await createStandardProject();
+    const { root } = await createStandardProject();
     try {
       const parser = new PythonParser();
       const pyFiles = [
@@ -575,7 +575,7 @@ describe("PythonParser.resolveImport() integration", () => {
   });
 
   test("resolves relative import through parser", async () => {
-    const { root, index } = await createStandardProject();
+    const { root } = await createStandardProject();
     try {
       const parser = new PythonParser();
       const pyFiles = [

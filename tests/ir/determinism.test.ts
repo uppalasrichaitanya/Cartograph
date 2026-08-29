@@ -26,6 +26,7 @@ import type { RepositoryIR } from "@/lib/analysis/ir/types";
  */
 function stripTimestamp(ir: RepositoryIR): Omit<RepositoryIR, "generatedAt"> {
   const { generatedAt, ...rest } = ir;
+  void generatedAt;
   return rest;
 }
 

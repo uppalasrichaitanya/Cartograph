@@ -7,7 +7,7 @@ import { extractAll, toLegacyResult } from "@/lib/analysis/extractAll";
 import { ParserRegistry } from "@/lib/analysis/parsers/registry";
 import { TypeScriptParser } from "@/lib/analysis/parsers/typescript/parser";
 import { extractImports } from "@/lib/analysis/extractImports";
-import type { ParseFileInput, ParserInitContext } from "@/lib/analysis/parsers/interface";
+import type { ParseFileInput } from "@/lib/analysis/parsers/interface";
 import type { ProjectFile } from "@/lib/analysis/resolveAliases";
 
 // ---------------------------------------------------------------------------

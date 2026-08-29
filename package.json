@@ -7,17 +7,19 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
-    "@vercel/blob": "^1.0.2",
+    "@fontsource/ibm-plex-mono": "^5.2.6",
+    "@fontsource/ibm-plex-sans": "^5.2.6",
+    "@vercel/blob": "^2.8.0",
     "@xyflow/react": "^12.8.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "elkjs": "^0.10.0",
-    "next": "^15.3.0",
+    "next": "^16.3.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "smol-toml": "^1.7.1",
@@ -31,7 +33,7 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "eslint": "^9.25.1",
-    "eslint-config-next": "^15.3.0",
+    "eslint-config-next": "^16.3.3",
     "tsx": "^4.19.3"
   }
 }

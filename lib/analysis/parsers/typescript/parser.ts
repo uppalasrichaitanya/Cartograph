@@ -228,8 +228,9 @@ export class TypeScriptParser implements LanguageParser {
   resolveImport(
     specifier: string,
     fromFile: ParseFileInput,
-    _knownFiles: ReadonlyArray<ParseFileInput>,
+    knownFiles: ReadonlyArray<ParseFileInput>,
   ): ResolvedSpecifier {
+    void knownFiles;
     if (!this.aliasConfig || !this.projectRoot || !this.fileLookupMap) {
       // Not initialized — cannot resolve. This should never happen
       // if the lifecycle is followed correctly.

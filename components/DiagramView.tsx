@@ -17,6 +17,7 @@ import {
   useNodesState,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AnalysisResult,
@@ -231,6 +232,7 @@ function getConnectedIds(nodeId: string, edges: Edge[]): Set<string> {
 
 /* ─── Inner Diagram (inside ReactFlowProvider) ─── */
 function DiagramInner({ result }: { result: AnalysisResult }) {
+  const router = useRouter();
   /* ─── What the address can refer to ───
    * Regions and files are validated against the repository before a URL value
    * becomes state, so a stale or edited link degrades to the nearest valid
@@ -308,6 +310,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
     }
 
     const leg = structuralLegDuration();
+    setHoveredFileId(null);
     if (leg <= 0) {
       setIsFading(false);
       setFolder(next);
@@ -451,7 +454,6 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         current && folder !== null && current.folder === folder ? current : null,
       );
     }
-    setHoveredFileId(null);
   }, [initial, folder, setEdges, setNodes]);
 
   /* ─── The address follows the position ───
@@ -667,7 +669,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
     // the effect depend on state it also writes — and since .map() always
     // returns a fresh array, that would loop forever.
     const subjectId = hoveredFileId ?? selectedFile?.id ?? null;
-    const focusConnected = subjectId ? getConnectedIds(subjectId, edges) : null;
+    const focusConnected = subjectId ? getConnectedIds(subjectId, initial.edges) : null;
     const activeIds = focusConnected ?? highlightedIds;
 
     setNodes((current) =>
@@ -737,7 +739,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
         };
       }),
     );
-  }, [hoveredFileId, highlightMode, selectedFile, edges.length, getHighlightedNodeIds, setNodes, setEdges]);
+  }, [hoveredFileId, highlightMode, selectedFile, initial.edges, getHighlightedNodeIds, setNodes, setEdges]);
 
   /* ─── Navigate to a node: pan camera, highlight, update panel (Issue 1, 2) ─── */
   const navigateToNode = useCallback(
@@ -1299,7 +1301,7 @@ function DiagramInner({ result }: { result: AnalysisResult }) {
           message="Your current repository map will be closed."
           confirmLabel="Leave"
           cancelLabel="Cancel"
-          onConfirm={() => { window.location.assign("/"); }}
+          onConfirm={() => router.push("/")}
           onCancel={() => setShowConfirm(false)}
         />
       )}

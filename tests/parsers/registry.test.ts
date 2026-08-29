@@ -41,9 +41,9 @@ function createFakeParser(overrides: Partial<LanguageParser> & { id: string } = 
       tracker.initializeCalls.push(context);
     },
 
-    parseFile(_file: ParseFileInput, _content: string): RawExtraction {
+    parseFile(file: ParseFileInput): RawExtraction {
       return {
-        path: _file.relativePath,
+        path: file.relativePath,
         lineCount: 1,
         internalImports: [],
         externalImports: [],
@@ -52,7 +52,7 @@ function createFakeParser(overrides: Partial<LanguageParser> & { id: string } = 
       };
     },
 
-    resolveImport(specifier: string, _fromFile: ParseFileInput, _knownFiles: ReadonlyArray<ParseFileInput>): ResolvedSpecifier {
+    resolveImport(specifier: string): ResolvedSpecifier {
       return { resolved: null, raw: specifier };
     },
 

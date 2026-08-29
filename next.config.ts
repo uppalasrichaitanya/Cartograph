@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  agentRules: false,
   serverExternalPackages: ["adm-zip", "typescript", "elkjs", "web-tree-sitter", "tree-sitter-wasms"],
   outputFileTracingIncludes: {
     "/api/analyze/**": [
