@@ -10,7 +10,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "tsx --test tests/**/*.test.ts",
+    "benchmark:query": "tsx scripts/benchmark-query.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.6",

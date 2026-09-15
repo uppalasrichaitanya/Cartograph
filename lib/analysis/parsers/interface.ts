@@ -158,6 +158,8 @@ export interface ResolvedSpecifier {
    * make the numbers converge — the asymmetry is truthful.
    */
   readonly unresolvedKind?: "external" | "unresolved-internal";
+  /** True when resolution selected a representative rather than an exact file. */
+  readonly approximate?: boolean;
 }
 
 // ---------------------------------------------------------------------------

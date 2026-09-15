@@ -23,7 +23,7 @@ export type ProjectFile = {
  * a project root. Also used as the fallback for discoverSourceFiles()
  * when no registry-provided set is given.
  */
-const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".py"]);
+const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go"]);
 const EXCLUDED_DIRECTORIES = new Set([
   // JavaScript / TypeScript
   "node_modules", ".git", "dist", "build", ".next",
@@ -56,6 +56,7 @@ export async function findProjectRoot(extractionDirectory: string): Promise<stri
       entry.name === "jsconfig.json" ||
       entry.name === "pyproject.toml" ||
       entry.name === "setup.cfg" ||
+      entry.name === "go.mod" ||
       DEFAULT_SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()),
   );
   const directories = visibleEntries.filter((entry) => entry.isDirectory());

@@ -3,6 +3,7 @@
 import type { FileEvidence } from "@/lib/analysis/projectConfidence";
 import type { Declaration } from "@/lib/analysis/ir/types";
 import type { GraphNode, DependencyGraph } from "@/types/graph";
+import { createGraphQuery } from "@/lib/analysis/query";
 import { CloseIcon } from "./Icons";
 
 export function FileDetailPanel({
@@ -41,10 +42,9 @@ export function FileDetailPanel({
 }) {
   if (!file) return null;
 
-  const importers = graph.edges
-    .filter((edge) => edge.to === file.id)
-    .map((edge) => graph.nodes.find((node) => node.id === edge.from)?.path)
-    .filter((path): path is string => Boolean(path));
+  const importers = createGraphQuery(graph)
+    .getNeighbors(file.id, "incoming")
+    .map((node) => node.path);
 
   return (
     <aside className="detail-panel is-entering" aria-label={`Details for ${file.path}`}>

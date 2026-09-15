@@ -56,6 +56,7 @@ const MANIFEST_FILES: ReadonlyArray<{ file: string; language: LanguageId }> = [
   { file: "jsconfig.json", language: "javascript" },
   { file: "pyproject.toml", language: "python" },
   { file: "setup.cfg", language: "python" },
+  { file: "go.mod", language: "go" },
 ];
 
 /**
@@ -244,7 +245,11 @@ export function buildRepositoryIR(
       for (const importPath of raw.internalImports) {
         const targetId = pathIndex.resolve(importPath);
         if (targetId) {
-          resolved.push({ targetId, raw: importPath });
+          resolved.push({
+            targetId,
+            raw: importPath,
+            approximate: (raw.approximateInternalImports ?? []).includes(importPath),
+          });
         } else {
           const key = `${fileNode.path} ${importPath}`;
           if (!unresolvedImports.has(key)) {

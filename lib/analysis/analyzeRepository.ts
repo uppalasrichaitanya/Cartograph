@@ -9,6 +9,7 @@ import { prepareRenderData } from "./prepareRenderData";
 import { ParserRegistry } from "./parsers/registry";
 import { TypeScriptParser } from "./parsers/typescript/parser";
 import { PythonParser } from "./parsers/python/parser";
+import { GoParser } from "./parsers/go/parser";
 import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
 import { getStorage, isUsingBlobStorage, StorageError } from "@/lib/storage";
@@ -94,8 +95,10 @@ export async function analyzeRepository(
     // registry-driven extensions for file discovery.
     const registry = new ParserRegistry();
     const pythonParser = new PythonParser();
+    const goParser = new GoParser();
     registry.register(new TypeScriptParser());
     registry.register(pythonParser);
+    registry.register(goParser);
 
     const legacyDiscovered = await discoverSourceFiles(
       projectRoot,
@@ -115,9 +118,11 @@ export async function analyzeRepository(
     // guess. Captured here because disposeAll() clears it, and preserved into
     // the IR so a guessed root is not later mistaken for a declared one.
     let pythonRootConfidence: RootConfidence | undefined;
+    let goRootConfidence: RootConfidence | undefined;
     try {
       parserExtractionResult = await extractAll(projectRoot, discoveredFiles, registry);
       pythonRootConfidence = pythonParser.rootConfidence ?? undefined;
+      goRootConfidence = goParser.rootConfidence ?? undefined;
     } finally {
       registry.disposeAll();
     }
@@ -155,10 +160,16 @@ export async function analyzeRepository(
     const hasPythonFiles = discoveredFiles.some((file) =>
       file.relativePath.endsWith(".py"),
     );
+    const hasGoFiles = discoveredFiles.some((file) => file.relativePath.endsWith(".go"));
+    const rootConfidenceOverride: RootConfidence | undefined =
+      hasPythonFiles && pythonRootConfidence === "structural-heuristic" ||
+      hasGoFiles && goRootConfidence === "structural-heuristic"
+        ? "structural-heuristic"
+        : hasPythonFiles ? pythonRootConfidence : hasGoFiles ? goRootConfidence : undefined;
     const repositoryIR = buildRepositoryIR(
       projectRoot,
       parserExtractionResult.extractions,
-      hasPythonFiles ? pythonRootConfidence : undefined,
+      rootConfidenceOverride,
     );
     const architectureModel = repositoryIR
       ? buildArchitectureModel(repositoryIR)

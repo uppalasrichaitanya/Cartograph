@@ -46,10 +46,9 @@ export type SymbolId = string & { readonly __brand: "SymbolId" };
  * Identifies a supported language. Extended additively per language —
  * adding a value here never removes or renames existing ones.
  *
- * Milestone 1 supports 'typescript' and 'javascript' only.
- * 'python' is included per the spec for forward compatibility.
+ * Supported languages are extended additively as parser plugins land.
  */
-export type LanguageId = "typescript" | "javascript" | "python";
+export type LanguageId = "typescript" | "javascript" | "python" | "go";
 
 // ---------------------------------------------------------------------------
 // Module Roots
@@ -391,6 +390,8 @@ export interface RawExtraction {
    * Added in Milestone 3, Phase 4. 
    */
   readonly unresolvedInternalImports?: ReadonlyArray<string>;
+  /** Internal imports resolved to a representative file rather than an exact target. */
+  readonly approximateInternalImports?: ReadonlyArray<string>;
   readonly parseErrors: ReadonlyArray<IRParseError>;
   readonly capabilitiesUsed: ReadonlyArray<ParserCapability>;
   /** Present when this parser attempted named-declaration extraction. */
@@ -406,6 +407,8 @@ export interface ResolvedImport {
   readonly targetId: NodeId;
   /** Original import specifier as written in source code. */
   readonly raw: string;
+  /** True when the target is a deterministic representative of a multi-file package. */
+  readonly approximate?: boolean;
 }
 
 // ---------------------------------------------------------------------------

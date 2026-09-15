@@ -246,6 +246,8 @@ instead of ad hoc folder logic; the provenance propagation rule is tested, not j
 
 ## Milestone 7 - Third Language & Capability Stress Test
 
+**Status:** Implemented (2026-09-15).
+
 **Objective:** Add a third language chosen specifically for structural difference from TS and
 Python (Go's module system, or Java's classpath-vs-file mismatch) to stress-test capability
 flags and the Architecture Model under real asymmetry.
@@ -282,6 +284,8 @@ limitations, and adding it required zero changes to the parser or analyzer inter
 
 ## Milestone 8 - Query Layer & Storage Evolution
 
+**Status:** Implemented (2026-09-15).
+
 **Objective:** Introduce a stable query API (`getNode`, `getNeighbors`, `findCycles`,
 `computeImpact`) as the only sanctioned way to read the graph, and prototype an indexed
 storage backend behind it — even if blob storage stays the default for now.
@@ -312,6 +316,14 @@ unchanged when routed through the new query layer.
 **Exit criteria:** The query interface is the only read path in use anywhere in the codebase;
 benchmark data exists to make an informed call on when — not if — to switch the default
 backend.
+
+**Implementation note (2026-09-15):** `lib/analysis/query` provides the stable query
+contract with linear and indexed in-memory backends. It accepts both legacy
+`DependencyGraph` data and canonical `RepositoryIR`, including containment/import edge
+filtering for IR callers. UI point lookups, importer navigation, and anomaly cycle detection
+now use the query layer. Blob/local persistence remains byte-compatible. Contract tests and
+an 800-file point-query benchmark cover correctness and the initial performance budget; see
+`docs/superpowers/specs/2026-09-15-milestone-8-query-layer.md`.
 
 ---
 

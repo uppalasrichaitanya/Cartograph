@@ -1,6 +1,6 @@
 # Cartograph
 
-Turn a JavaScript, TypeScript, or Python project zip into a shareable, interactive dependency map.
+Turn a JavaScript, TypeScript, Python, or Go project zip into a shareable, interactive dependency map.
 
 Every edge on the map is read from an actual import statement. Nothing is inferred from folder names, nothing is guessed from naming conventions, and uploaded code is never executed. When a dependency cannot be resolved, Cartograph draws it as unresolved rather than quietly dropping it — because a missing edge and an edge to nowhere are different facts.
 
@@ -51,11 +51,16 @@ Files that could not be fully parsed are reported alongside the map instead of b
 | --- | --- | --- |
 | TypeScript / JavaScript | `.ts` `.tsx` `.js` `.jsx` | TypeScript compiler API |
 | Python | `.py` | `tree-sitter-python` (WASM) |
+| Go | `.go` | `tree-sitter-go` (WASM) |
 
-Both parsers also index named declarations. TypeScript/JavaScript support functions, named
+All parsers also index named declarations. TypeScript/JavaScript support functions, named
 function or arrow expressions assigned to variables, classes, constructors, methods,
 interfaces, type aliases, and enums. Python supports functions, async functions, nested
 functions, classes, constructors, and methods.
+
+Go package imports resolve to a deterministic representative file when a package contains
+multiple source files. Those edges are marked heuristic because the imported symbol may live
+in another file in the package.
 
 **Path aliases are honoured.** `baseUrl` and `paths` from `tsconfig.json` or `jsconfig.json` are resolved, so `@/lib/thing` becomes a real edge instead of an unresolved stub. Re-exports are followed.
 

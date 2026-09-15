@@ -27,6 +27,7 @@ import type {
   RenderNodeData,
 } from "@/types/graph";
 import { fileEvidence } from "@/lib/analysis/projectConfidence";
+import { createGraphQuery } from "@/lib/analysis/query";
 import {
   isNavigation,
   parsePosition,
@@ -240,6 +241,7 @@ function DiagramInner({
   initialSearch: string;
 }) {
   const router = useRouter();
+  const graphQuery = useMemo(() => createGraphQuery(result.graph), [result.graph]);
   /* ─── What the address can refer to ───
    * Regions and files are validated against the repository before a URL value
    * becomes state, so a stale or edited link degrades to the nearest valid
@@ -281,7 +283,7 @@ function DiagramInner({
   const [folder, setFolder] = useState<string | null>(initialPosition.region);
   const [selectedFile, setSelectedFile] = useState<GraphNode | null>(
     initialPosition.file
-      ? result.graph.nodes.find((n) => n.id === initialPosition.file) ?? null
+      ? graphQuery.getNode(initialPosition.file) ?? null
       : null,
   );
   const [selectedSymbolId, setSelectedSymbolId] = useState<string | null>(
@@ -589,7 +591,7 @@ function DiagramInner({
       if (crossesRegion) changeRegion(position.region);
       setSelectedFile(
         position.file
-          ? result.graph.nodes.find((n) => n.id === position.file) ?? null
+          ? graphQuery.getNode(position.file) ?? null
           : null,
       );
       setSelectedSymbolId(position.symbol ?? null);
@@ -607,7 +609,7 @@ function DiagramInner({
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [knownRegions, knownFiles, symbolOwnerById, result.graph.nodes, reactFlowInstance, folder, changeRegion]);
+  }, [knownRegions, knownFiles, symbolOwnerById, result.graph.nodes, graphQuery, reactFlowInstance, folder, changeRegion]);
 
   /* ─── Restore the shared camera once the graph has mounted ───
    *
@@ -777,7 +779,7 @@ function DiagramInner({
       const flowNode = reactFlowInstance.getNode(nodeId);
       if (!flowNode) {
         // Node might be in a different folder view — check which folder.
-        const graphNode = result.graph.nodes.find((n) => n.id === nodeId);
+        const graphNode = graphQuery.getNode(nodeId);
         if (graphNode && graphNode.folder !== folder) {
           // Structural: this replaces everything on screen. Same helper as
           // every other region change, so arriving here from search reads
@@ -811,14 +813,14 @@ function DiagramInner({
         { zoom, ...cameraMotion("connective") },
       );
 
-      const graphNode = result.graph.nodes.find((n) => n.id === nodeId);
+      const graphNode = graphQuery.getNode(nodeId);
       if (graphNode) {
         setSelectedFile(graphNode);
         setSelectedSymbolId(symbolId);
         recordExamined("file", graphNode.id);
       }
     },
-    [reactFlowInstance, result.graph.nodes, folder, selectedFile, recordExamined, changeRegion],
+    [reactFlowInstance, graphQuery, folder, selectedFile, recordExamined, changeRegion],
   );
 
   /* ─── Node Click Handler ─── */
@@ -834,7 +836,7 @@ function DiagramInner({
         return;
       }
       if (node.data.kind === "file" && node.data.filePath) {
-        const graphNode = result.graph.nodes.find((file) => file.id === node.data.filePath) ?? null;
+        const graphNode = graphQuery.getNode(node.data.filePath) ?? null;
         setSelectedFile(graphNode);
         setSelectedSymbolId(null);
         if (graphNode) recordExamined("file", graphNode.id);
@@ -857,7 +859,7 @@ function DiagramInner({
         }
       }
     },
-    [result.graph.nodes, reactFlowInstance, recordExamined, changeRegion],
+    [graphQuery, reactFlowInstance, recordExamined, changeRegion],
   );
 
   /* ─── Hover (graph nodes) ─── */

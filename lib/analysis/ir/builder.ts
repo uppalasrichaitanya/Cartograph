@@ -64,6 +64,7 @@ export function languageFromPath(filePath: string): LanguageId {
   if (ext === ".ts" || ext === ".tsx") return "typescript";
   if (ext === ".js" || ext === ".jsx") return "javascript";
   if (ext === ".py") return "python";
+  if (ext === ".go") return "go";
   return "javascript";
 }
 
@@ -201,7 +202,13 @@ export class IRBuilder implements IRBuilderContract {
               derivedFrom: [file.id],
               note: "Source file had parse errors",
             }
-          : { origin: "derived", derivedFrom: [file.id] };
+          : imp.approximate
+            ? {
+                origin: "heuristic",
+                derivedFrom: [file.id],
+                note: "Go package import; representative file of a multi-file package",
+              }
+            : { origin: "derived", derivedFrom: [file.id] };
 
       return {
         id: createEdgeId(file.id, "imports", imp.targetId),

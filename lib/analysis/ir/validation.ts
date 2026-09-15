@@ -63,6 +63,7 @@ const VALID_LANGUAGES: readonly LanguageId[] = [
   "typescript",
   "javascript",
   "python",
+  "go",
 ];
 const VALID_EDGE_KINDS: readonly EdgeKind[] = ["contains", "imports"];
 const VALID_PROVENANCE_ORIGINS: readonly ProvenanceOrigin[] = [

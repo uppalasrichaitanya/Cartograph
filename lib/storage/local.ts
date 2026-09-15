@@ -8,12 +8,7 @@ export { StorageError };
 export { MAX_UPLOAD_BYTES } from "./interface";
 
 /** Local data directory, relative to project root. */
-const DATA_DIR = path.join(process.cwd(), ".data", "analyses");
-
-/** Ensure the data directory exists. */
-async function ensureDataDir(): Promise<void> {
-  await mkdir(DATA_DIR, { recursive: true });
-}
+const DEFAULT_DATA_DIR = path.join(process.cwd(), ".data", "analyses");
 
 /**
  * Local filesystem storage backend.
@@ -23,15 +18,17 @@ async function ensureDataDir(): Promise<void> {
  * where no external storage service is needed.
  */
 export class LocalStorage implements StorageBackend {
+  constructor(private readonly dataDir: string = DEFAULT_DATA_DIR) {}
+
   async saveAnalysis(result: AnalysisResult): Promise<void> {
-    await ensureDataDir();
-    const filePath = path.join(DATA_DIR, `${result.id}.json`);
+    await mkdir(this.dataDir, { recursive: true });
+    const filePath = path.join(this.dataDir, `${result.id}.json`);
     await writeFile(filePath, JSON.stringify(result), "utf8");
   }
 
   async loadAnalysis(id: string): Promise<AnalysisResult | null> {
     if (!/^[a-f0-9-]{36}$/i.test(id)) return null;
-    const filePath = path.join(DATA_DIR, `${id}.json`);
+    const filePath = path.join(this.dataDir, `${id}.json`);
     try {
       const data = await readFile(filePath, "utf8");
       return JSON.parse(data) as AnalysisResult;
