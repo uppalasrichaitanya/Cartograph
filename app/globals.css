@@ -912,6 +912,11 @@ h1, h2, h3, p { margin-top: 0; }
   background: var(--focus-wash);
   border-color: var(--focus);
 }
+.rail-button svg,
+.quick-action svg { display: inline-block; vertical-align: -2px; margin-right: var(--space-1); }
+.rail-button-assisted { border-style: dashed; background: var(--assisted-wash); }
+.rail-button-assisted:hover { border-color: var(--rule-strong); background: var(--assisted-wash); }
+.rail-button-assisted.is-open { border-color: var(--rule-strong); background: var(--assisted-wash); }
 
 /* ─── Breadcrumb ─────────────────────────────────────────────────────────
  *
@@ -1629,6 +1634,30 @@ h1, h2, h3, p { margin-top: 0; }
 .inference-group-kind { color: var(--assisted); font-family: var(--type-mono); font-size: var(--text-micro); text-transform: uppercase; }
 .inference-group-name { color: var(--ink); font-weight: 500; }
 .inference-group-count { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
+
+/* The AI surface is a quoted interpretation, kept beside the map and apart
+ * from measured file evidence. It shares the inspector frame but uses the
+ * assisted colour and source labels to make that boundary visible. */
+.ai-panel { z-index: 11; }
+.ai-empty-state { margin-top: var(--space-5); }
+.ai-empty-state p,
+.ai-status,
+.ai-uncertainty,
+.ai-provider { margin: 0 0 var(--space-4); color: var(--ink-muted); font-size: var(--text-small); line-height: 1.5; }
+.ai-generate { color: var(--ink); border-color: var(--rule-strong); background: var(--assisted-wash); }
+.ai-generate:hover { color: var(--ink); border-color: var(--rule-strong); }
+.ai-status { padding: var(--space-3); background: var(--assisted-wash); border-left: 2px solid var(--rule-strong); }
+.ai-error { margin-top: var(--space-5); padding: var(--space-3); background: var(--danger-wash); border-left: 2px solid var(--danger); }
+.ai-error strong { color: var(--danger); font-size: var(--text-small); }
+.ai-error p { margin: var(--space-1) 0 var(--space-3); color: var(--ink-muted); font-size: var(--text-small); }
+.ai-result { margin-top: var(--space-5); }
+.ai-result .assisted-note { margin-top: 0; }
+.ai-claims { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.ai-claims li { padding-top: var(--space-2); border-top: 1px dashed var(--rule); }
+.ai-claims p { margin: 0 0 var(--space-2); color: var(--ink-muted); font-size: var(--text-small); line-height: 1.5; }
+.ai-citations { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.ai-citations code { max-width: 100%; overflow: hidden; padding: 2px var(--space-1); color: var(--ink-muted); background: var(--assisted-wash); font-size: var(--text-micro); text-overflow: ellipsis; white-space: nowrap; }
+.ai-provider { margin-top: var(--space-4); color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
 
 /* ─── Detail Panel ─────────────────────────────────────────────────────
  *

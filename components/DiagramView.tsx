@@ -44,11 +44,13 @@ import {
   type TrailEntry,
 } from "@/lib/workspace/trail";
 import { FileDetailPanel } from "./FileDetailPanel";
+import { AiExplanationPanel } from "./AiExplanationPanel";
 import { BreadcrumbNav } from "./BreadcrumbNav";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SearchOverlay } from "./SearchOverlay";
 import { ZoomControls } from "./ZoomControls";
-import { MarkIcon, SearchIcon } from "./Icons";
+import { LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
+import { copyShareLink } from "@/lib/workspace/share";
 
 /* ─── Types ─── */
 type FlowNode = Node<RenderNodeData, "architecture">;
@@ -298,6 +300,8 @@ function DiagramInner({
   const [searchOpen, setSearchOpen] = useState(false);
   const [lensMenuOpen, setLensMenuOpen] = useState(false);
   const [inferenceOpen, setInferenceOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [trail, setTrail] = useState<ReadonlyArray<TrailEntry>>([]);
 
   const canvas = useRef<HTMLDivElement>(null);
@@ -550,6 +554,14 @@ function DiagramInner({
     },
     [folder, selectedFile, selectedSymbolId, highlightMode, reactFlowInstance],
   );
+
+  const handleShare = useCallback(async () => {
+    // History writes are synchronous, so the URL below includes the current
+    // selection and camera even when the user shares immediately after moving.
+    writePosition();
+    const copied = await copyShareLink(window.location.href);
+    setShareStatus(copied ? "copied" : "failed");
+  }, [writePosition]);
 
   // Write on every change of place.
   //
@@ -1133,6 +1145,19 @@ function DiagramInner({
           )}
           <button
             type="button"
+            className={`rail-button rail-button-assisted ${aiOpen ? "is-open" : ""}`}
+            onClick={() => {
+              setAiOpen((open) => !open);
+              setLensMenuOpen(false);
+              setInferenceOpen(false);
+            }}
+            aria-expanded={aiOpen}
+            aria-haspopup="dialog"
+          >
+            <SparkIcon size={13} /> AI explain
+          </button>
+          <button
+            type="button"
             className="rail-button"
             // Writes the current position first, then copies. The address is
             // kept current by an effect, but framing is only written when a
@@ -1141,12 +1166,10 @@ function DiagramInner({
             // reflect what the sender is actually looking at, which was the
             // whole failure of the old share: it always sent the default
             // overview no matter where the sender was.
-            onClick={() => {
-              writePosition();
-              navigator.clipboard.writeText(window.location.href);
-            }}
+            onClick={handleShare}
           >
-            Share
+            <LinkIcon size={13} />
+            {shareStatus === "copied" ? "Link copied" : shareStatus === "failed" ? "Copy failed" : "Share"}
           </button>
         </div>
       </header>
@@ -1354,17 +1377,27 @@ function DiagramInner({
       )}
 
       {/* ─── Inspector ─── */}
-      <FileDetailPanel
-        file={selectedFile}
-        graph={result.graph}
-        evidence={selectedEvidence}
-        declarations={selectedDeclarations}
-        selectedSymbolId={selectedSymbolId}
-        onSelectSymbol={setSelectedSymbolId}
-        onClose={closePanel}
-        onNavigateToFile={navigateToNode}
-        onHoverFile={setHoveredFileId}
-      />
+      {!aiOpen && (
+        <FileDetailPanel
+          file={selectedFile}
+          graph={result.graph}
+          evidence={selectedEvidence}
+          declarations={selectedDeclarations}
+          selectedSymbolId={selectedSymbolId}
+          onSelectSymbol={setSelectedSymbolId}
+          onClose={closePanel}
+          onNavigateToFile={navigateToNode}
+          onHoverFile={setHoveredFileId}
+        />
+      )}
+
+      {aiOpen && (
+        <AiExplanationPanel
+          analysisId={result.id}
+          file={selectedFile}
+          onClose={() => setAiOpen(false)}
+        />
+      )}
 
       {showConfirm && (
         <ConfirmDialog

@@ -113,3 +113,22 @@ export function CloseIcon({ size = 16 }: IconProps) {
     </Glyph>
   );
 }
+
+/** A small evidence spark for assisted interpretation controls. */
+export function SparkIcon({ size = 16 }: IconProps) {
+  return (
+    <Glyph size={size}>
+      <path d="M8 2.5v3M8 10.5v3M2.5 8h3M10.5 8h3M4.1 4.1l2.1 2.1M9.8 9.8l2.1 2.1M11.9 4.1 9.8 6.2M6.2 9.8l-2.1 2.1" />
+      <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
+/** Share a stable address, represented as a connected link rather than a social icon. */
+export function LinkIcon({ size = 16 }: IconProps) {
+  return (
+    <Glyph size={size}>
+      <path d="M6.2 9.8 9.8 6.2M5.1 11.5H4a2.5 2.5 0 0 1 0-5h2M10.9 4.5H12a2.5 2.5 0 0 1 0 5h-2" />
+    </Glyph>
+  );
+}
