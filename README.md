@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./app/icon.svg" width="64" height="64" alt="Cartograph logo" />
+</p>
+
 # Cartograph
 
 Turn a JavaScript, TypeScript, Python, or Go project zip into a shareable, interactive dependency map.

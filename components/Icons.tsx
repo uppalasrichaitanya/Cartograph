@@ -44,22 +44,20 @@ function Glyph({ size = 16, children }: IconProps & { children: React.ReactNode 
 }
 
 /**
- * The product mark: a triangulation station.
+ * The product mark: contour lines forming a C around a survey point.
  *
- * A triangle enclosing a point is the surveyor's symbol for a fixed reference
- * — the known position every other measurement is taken against. It is the
- * most honest mark available for this product, whose entire claim is that it
- * gives you a fixed point to reason from.
- *
- * It is also the reason the wordmark is not load-bearing: a triangulation
- * station in rust, beside a monospaced repository name, over a graticule, is
- * recognisable as Cartograph with the word removed.
+ * The open rings read simultaneously as a cartographic contour, the initial
+ * in Cartograph, and the nested boundaries of a codebase. The fixed point is
+ * the known position the survey is measured from. Unlike the old triangular
+ * station, the silhouette cannot be mistaken for a warning icon at small
+ * sizes and remains recognisable without the wordmark.
  */
 export function MarkIcon({ size = 16 }: IconProps) {
   return (
     <Glyph size={size}>
-      <path d="M8 2.5 14 13H2L8 2.5Z" />
-      <circle cx="8" cy="9.6" r="1.1" fill="currentColor" stroke="none" />
+      <path d="M12.7 3.2A6 6 0 1 0 12.7 12.8" />
+      <path d="M11 5.6A3.15 3.15 0 1 0 11 10.4" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
     </Glyph>
   );
 }
