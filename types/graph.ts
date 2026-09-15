@@ -1,5 +1,5 @@
 import type { RepositoryIR } from "@/lib/analysis/ir/types";
-import type { ArchitectureModelData } from "@/lib/analysis/architecture-model/types";
+import type { ArchitectureInferenceData, ArchitectureModelData } from "@/lib/analysis/architecture-model/types";
 import type { AnalysisView } from "@/lib/analysis/analyzers/interface";
 
 export type SourceFileAnalysis = {
@@ -212,4 +212,6 @@ export type AnalysisResult = {
   analysisViews?: ReadonlyArray<AnalysisView>;
   /** Deterministic boundary index. Absent on analyses created before Milestone 6. */
   architectureModel?: ArchitectureModelData;
+  /** Optional heuristic layer/domain groupings, always visibly non-verified. */
+  architectureInferences?: ArchitectureInferenceData;
 };

@@ -374,6 +374,8 @@ future model adapter cannot bypass the query contract or emit an unvalidated cla
 
 ## Milestone 10 - Heuristic Architecture Views
 
+**Status:** Implemented (2026-09-15).
+
 **Objective:** Build the first heuristic analyzers (layer inference, or domain/feature
 grouping) on top of the Architecture Model, fully provenance-tagged as `heuristic`, with
 optional user-defined overrides.
@@ -404,6 +406,13 @@ repos.
 
 **Exit criteria:** Heuristic views are shipped, visually distinguishable, and a real user
 study or spot-check confirms people don't mistake them for verified fact.
+
+**Implementation note (2026-09-15):** `lib/analysis/architecture-model/inference.ts` adds
+deterministic layer/domain grouping from path and dependency structure. Every inferred group is
+tagged `heuristic` with node/edge lineage and an explicit “may be wrong” note. Node assignment
+overrides are supported as `user-defined` provenance. The UI exposes the groups through a dashed
+Inferred views surface with a plain uncertainty disclaimer; inferred data is persisted alongside
+the analysis result without changing the verified graph or Architecture Model.
 
 ---
 

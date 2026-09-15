@@ -1620,6 +1620,16 @@ h1, h2, h3, p { margin-top: 0; }
   line-height: 1.55;
 }
 
+/* Heuristic architecture views are intentionally distinct from observations
+ * and verified graph facts: quiet dashed treatment and an explicit disclaimer. */
+.rail-button-heuristic { border-style: dashed; }
+.inference-popover { max-width: 360px; }
+.inference-disclaimer { margin: 0 0 var(--space-3); color: var(--ink-faint); font-size: var(--text-micro); line-height: 1.45; }
+.inference-group { display: grid; grid-template-columns: 72px 1fr auto; gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0; border-top: 1px dashed var(--line); }
+.inference-group-kind { color: var(--assisted); font-family: var(--type-mono); font-size: var(--text-micro); text-transform: uppercase; }
+.inference-group-name { color: var(--ink); font-weight: 500; }
+.inference-group-count { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
+
 /* ─── Detail Panel ─────────────────────────────────────────────────────
  *
  * Overlays the right edge of the map. It does NOT resize the map: the

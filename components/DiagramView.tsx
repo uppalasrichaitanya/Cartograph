@@ -297,6 +297,7 @@ function DiagramInner({
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [lensMenuOpen, setLensMenuOpen] = useState(false);
+  const [inferenceOpen, setInferenceOpen] = useState(false);
   const [trail, setTrail] = useState<ReadonlyArray<TrailEntry>>([]);
 
   const canvas = useRef<HTMLDivElement>(null);
@@ -1119,6 +1120,17 @@ function DiagramInner({
           >
             Observations
           </button>
+          {result.architectureInferences && (
+            <button
+              type="button"
+              className={`rail-button rail-button-heuristic ${inferenceOpen ? "is-open" : ""}`}
+              onClick={() => setInferenceOpen((open) => !open)}
+              aria-expanded={inferenceOpen}
+              aria-haspopup="true"
+            >
+              Inferred views
+            </button>
+          )}
           <button
             type="button"
             className="rail-button"
@@ -1323,6 +1335,21 @@ function DiagramInner({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {inferenceOpen && result.architectureInferences && (
+        <div className="lens-popover inference-popover" role="dialog" aria-label="Inferred architecture views">
+          <p className="lens-popover-heading">INFERRED VIEWS</p>
+          <p className="inference-disclaimer">Heuristic groupings from paths and dependencies. They may be wrong.</p>
+          {result.architectureInferences.groups.map((group) => (
+            <div className="inference-group" key={group.id}>
+              <span className="inference-group-kind">{group.kind}</span>
+              <span className="inference-group-name">{group.name}</span>
+              <span className="inference-group-count">{group.memberNodeIds.length} files</span>
+            </div>
+          ))}
+          {result.architectureInferences.groups.length === 0 && <p className="lens-item-empty">No inferred groups.</p>}
         </div>
       )}
 

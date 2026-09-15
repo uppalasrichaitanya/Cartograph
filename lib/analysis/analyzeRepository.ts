@@ -16,6 +16,7 @@ import { getStorage, isUsingBlobStorage, StorageError } from "@/lib/storage";
 import { isValidUploadReference } from "@/lib/storage/uploadReference";
 import { buildRepositoryIR } from "./ir/bridge";
 import { buildArchitectureModel } from "./architecture-model/model";
+import { inferArchitectureViews } from "./architecture-model/inference";
 import {
   ANOMALY_ANALYZER_ID,
   createBuiltInAnalyzerRegistry,
@@ -174,6 +175,9 @@ export async function analyzeRepository(
     const architectureModel = repositoryIR
       ? buildArchitectureModel(repositoryIR)
       : null;
+    const architectureInferences = repositoryIR
+      ? inferArchitectureViews(repositoryIR)
+      : null;
 
     await report("clustering", "Building deterministic architecture boundaries");
     await report("detecting", "Running capability-aware architecture analyzers");
@@ -219,6 +223,7 @@ export async function analyzeRepository(
       ...(repositoryIR ? { repositoryIR } : {}),
       analysisViews,
       ...(architectureModel ? { architectureModel } : {}),
+      ...(architectureInferences ? { architectureInferences } : {}),
     };
     await report("persisting", "Saving the shareable diagram");
     await storage.saveAnalysis(result);
