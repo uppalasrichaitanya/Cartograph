@@ -7,6 +7,7 @@ export type QueryNode = GraphNode | IRNode;
 
 export interface GraphQuery<TNode extends QueryNode = QueryNode> {
   getNode(id: string): TNode | undefined;
+  getEdge(id: string): QueryEdge | undefined;
   getNeighbors(
     id: string,
     direction?: NeighborDirection,
@@ -16,7 +17,7 @@ export interface GraphQuery<TNode extends QueryNode = QueryNode> {
   computeImpact(id: string): ReadonlyArray<TNode>;
 }
 
-type QueryEdge = Readonly<{ from: string; to: string; kind: QueryEdgeKind }>;
+export type QueryEdge = Readonly<{ id?: string; from: string; to: string; kind: QueryEdgeKind }>;
 type QuerySource<TNode extends QueryNode> = Readonly<{
   nodes: ReadonlyArray<TNode>;
   edges: ReadonlyArray<QueryEdge>;
@@ -103,6 +104,10 @@ export class LinearGraphQuery<TNode extends QueryNode> implements GraphQuery<TNo
     return this.source.nodes.find((node) => node.id === id);
   }
 
+  getEdge(id: string): QueryEdge | undefined {
+    return this.source.edges.find((edge) => edge.id === id);
+  }
+
   getNeighbors(
     id: string,
     direction: NeighborDirection = "outgoing",
@@ -139,6 +144,7 @@ export class LinearGraphQuery<TNode extends QueryNode> implements GraphQuery<TNo
 /** Ephemeral indexed backend; persisted blob/local storage remains unchanged. */
 export class IndexedGraphQuery<TNode extends QueryNode> implements GraphQuery<TNode> {
   private readonly nodesById: ReadonlyMap<string, TNode>;
+  private readonly edgesById: ReadonlyMap<string, QueryEdge>;
   private readonly outgoing: ReadonlyMap<string, ReadonlyArray<QueryEdge>>;
   private readonly incoming: ReadonlyMap<string, ReadonlyArray<QueryEdge>>;
 
@@ -146,24 +152,31 @@ export class IndexedGraphQuery<TNode extends QueryNode> implements GraphQuery<TN
     const nodes = new Map(source.nodes.map((node) => [node.id, node]));
     const out = new Map<string, QueryEdge[]>();
     const inbound = new Map<string, QueryEdge[]>();
+    const byId = new Map<string, QueryEdge>();
     for (const node of source.nodes) {
       out.set(node.id, []);
       inbound.set(node.id, []);
     }
     for (const edge of source.edges) {
       if (!nodes.has(edge.from) || !nodes.has(edge.to)) continue;
+      if (edge.id) byId.set(edge.id, edge);
       out.get(edge.from)?.push(edge);
       inbound.get(edge.to)?.push(edge);
     }
     for (const values of out.values()) values.sort((a, b) => a.to.localeCompare(b.to));
     for (const values of inbound.values()) values.sort((a, b) => a.from.localeCompare(b.from));
     this.nodesById = nodes;
+    this.edgesById = byId;
     this.outgoing = out;
     this.incoming = inbound;
   }
 
   getNode(id: string): TNode | undefined {
     return this.nodesById.get(id);
+  }
+
+  getEdge(id: string): QueryEdge | undefined {
+    return this.edgesById.get(id);
   }
 
   getNeighbors(

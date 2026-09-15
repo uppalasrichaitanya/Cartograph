@@ -329,6 +329,8 @@ an 800-file point-query benchmark cover correctness and the initial performance 
 
 ## Milestone 9 - AI Reasoning Layer
 
+**Status:** Implemented (2026-09-15).
+
 **Objective:** Build the AI layer as a strictly read-only, tool-use consumer of the Milestone 7
 query API, with every AI statement traceable to specific queried facts.
 
@@ -356,6 +358,12 @@ known-correct facts on fixture repos.
 
 **Exit criteria:** The AI cannot produce an architecture claim without a verifiable citation
 into the graph — enforced by an automated check, not just prompt instructions.
+
+**Implementation note (2026-09-15):** `lib/ai` provides read-only wrappers for every query
+operation, per-context caching, an evidence catalog, and a grounding validator that checks
+node, edge, and analyzer-result IDs. Empty and missing lookups return explicit uncertainty;
+forged citations are rejected by automated tests. The package is model-provider neutral so a
+future model adapter cannot bypass the query contract or emit an unvalidated claim.
 
 > **Pause and evaluate — the second most important checkpoint in this roadmap.** Before
 > adding any heuristic or opinionated analysis, confirm the AI grounding holds up under real,
