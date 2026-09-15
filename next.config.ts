@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/analyze/**": [
       "./node_modules/tree-sitter-wasms/out/tree-sitter-python.wasm",
+      "./node_modules/tree-sitter-wasms/out/tree-sitter-go.wasm",
       "./node_modules/tree-sitter-wasms/package.json",
     ],
   },
