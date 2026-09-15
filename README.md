@@ -1,153 +1,215 @@
+<table align="center">
+  <tr>
+    <td align="center" bgcolor="#F4F0E6" width="112" height="112">
+      <img src="./app/icon.svg" width="72" height="72" alt="Cartograph logo" />
+    </td>
+  </tr>
+</table>
+
+<h1 align="center">Cartograph</h1>
+
 <p align="center">
-  <img src="./app/icon.svg" width="64" height="64" alt="Cartograph logo" />
+  <strong>Verified dependency maps for real codebases.</strong><br />
+  Upload a repository. Read its architecture. Follow every measured edge.
 </p>
 
-# Cartograph
+<p align="center">
+  <a href="#run-locally">Run locally</a> |
+  <a href="#how-it-works">How it works</a> |
+  <a href="#safety">Safety</a> |
+  <a href="docs/project-philosophy.md">Project philosophy</a>
+</p>
 
-Turn a JavaScript, TypeScript, Python, or Go project zip into a shareable, interactive dependency map.
+Cartograph turns a JavaScript, TypeScript, Python, or Go repository into a
+shareable, interactive dependency map. Every graph edge comes from an import
+statement in source. Nothing is inferred from folder names, and uploaded code
+is never executed.
 
-Every edge on the map is read from an actual import statement. Nothing is inferred from folder names, nothing is guessed from naming conventions, and uploaded code is never executed. When a dependency cannot be resolved, Cartograph draws it as unresolved rather than quietly dropping it — because a missing edge and an edge to nowhere are different facts.
-
-**Static analysis only.** No model creates, removes, or reroutes a node or an edge.
-
----
+When a dependency cannot be resolved, Cartograph draws it as unresolved rather
+than silently dropping it. A missing edge and an edge to nowhere are different
+facts.
 
 ## What you get
 
-Upload a zip, watch the analysis stream its progress, and land on a permanent shareable URL (`/repo/<id>`).
+### A map with two useful altitudes
 
-**A map at two altitudes.** A folder-level survey of the whole repository, and a file-level view inside any region. Cross-region dependencies stay visible from inside a region as boundary markers, so following a dependency out of a folder never dead-ends.
+Start with a folder-level survey of the whole repository, then drill into a
+region for its file-level dependencies. Cross-region dependencies remain
+visible as boundary markers, so following an edge never dead-ends at a view
+boundary.
 
-**Marks that show the limits of the analysis.** Every node and edge carries the evidence behind it, rendered so you can tell them apart at a glance:
+### Evidence that stays visible
+
+Every node and edge carries the confidence of the fact behind it:
 
 | Mark | Meaning |
 | --- | --- |
 | `verified` | Directly observed in source. |
-| `derived` | Deterministically computed from verified facts. As reliable as verified, but with lineage. |
-| `heuristic` | Best-effort. May be wrong. |
-| `unknown` | The dependency exists; its target could not be determined. |
+| `derived` | Deterministically computed from verified facts, with lineage. |
+| `heuristic` | Best-effort and may be wrong. |
+| `unknown` | The dependency exists, but its target could not be determined. |
+| `assisted` | Generated interpretation, kept off graph geometry. |
 
-Confidence never increases as data flows through the pipeline. A fifth state, `assisted`, is reserved for generated interpretation and is excluded at the type level from ever becoming graph geometry.
+Confidence never increases as data moves through the pipeline. Generated
+interpretation is always displayed on a separate assisted surface and can
+never create, remove, or reroute a graph edge.
 
-**Structural observations**, each traceable back to the graph that produced it — import cycles, dependency hubs ranked by in-degree, and orphaned files that nothing imports.
+### Structural observations
 
-Those computations run through an ordered analyzer plugin registry. Analyzers declare the
-parser capabilities they require, degrade or skip honestly when coverage is incomplete, and
-persist a provenance-bearing execution summary. Tier-2 analyzers can consume tier-1 results
-through the shared analysis context; there is deliberately no speculative DAG scheduler.
+Inspect import cycles, dependency hubs ranked by in-degree, and files that are
+not imported anywhere. Each observation is traceable to the graph that
+produced it; the interface does not collapse unlike measurements into one
+severity score.
 
-**A shared Architecture Model** indexes module roots, folder hierarchy, and display regions
-over canonical IR node IDs. The map's folder grouping now reads this model rather than
-recomputing repository boundaries independently. The model is deterministic only: inferred
-layers, domains, and service boundaries are not part of it yet.
+### Grounded AI explanations
 
-**Repository context** — detected primary language, framework (Next.js, Remix, Preact, and others, from config files or `package.json` dependencies), file and folder counts, dependency count, and archive size.
+The **AI explain** action can interpret the selected file or the repository
+overview using the graph as its evidence set. Responses are requested from the
+configured provider chain and rejected unless every claim has a valid citation
+to a measured node, edge, or analyzer result.
 
-**A workspace to explore it** - search across files, named symbols, and packages; a per-file detail panel; a breadcrumb trail of where you have been; and zoom controls. Symbol selections are shareable and survive refresh.
+Supported providers, attempted in order:
 
-Files that could not be fully parsed are reported alongside the map instead of being silently omitted.
+1. Gemini
+2. Groq
+3. OpenRouter
 
----
+Provider keys are server-side only. The model is an interpreter, not an author
+of graph data.
 
-## How it reads a repository
+### A workspace for investigation
+
+Search files, named symbols, and packages. Open a file detail panel, follow
+imports and importers, inspect confidence evidence, use the breadcrumb and
+investigation trail, and share a URL that preserves the current position.
+
+## How it works
+
+1. Upload a repository zip.
+2. Cartograph validates the archive and discovers source files.
+3. Language parsers extract imports, declarations, and parse errors.
+4. The analysis pipeline builds a validated intermediate representation and a
+   deterministic dependency graph.
+5. Architecture boundaries, observations, and layout are computed from that
+   graph.
+6. The result is persisted at `/repo/<id>` and can be shared directly.
+
+The pipeline is deterministic: the same repository produces the same graph,
+ordering, and derived architecture records.
+
+## Supported languages
 
 | Language | Extensions | Parser |
 | --- | --- | --- |
 | TypeScript / JavaScript | `.ts` `.tsx` `.js` `.jsx` | TypeScript compiler API |
-| Python | `.py` | `tree-sitter-python` (WASM) |
-| Go | `.go` | `tree-sitter-go` (WASM) |
+| Python | `.py` | tree-sitter Python (WASM) |
+| Go | `.go` | tree-sitter Go (WASM) |
 
-All parsers also index named declarations. TypeScript/JavaScript support functions, named
-function or arrow expressions assigned to variables, classes, constructors, methods,
-interfaces, type aliases, and enums. Python supports functions, async functions, nested
-functions, classes, constructors, and methods.
+All parsers index named declarations. The symbol index is not a call graph:
+dependency geometry remains file-level and import-based.
 
-Go package imports resolve to a deterministic representative file when a package contains
-multiple source files. Those edges are marked heuristic because the imported symbol may live
-in another file in the package.
-
-**Path aliases are honoured.** `baseUrl` and `paths` from `tsconfig.json` or `jsconfig.json` are resolved, so `@/lib/thing` becomes a real edge instead of an unresolved stub. Re-exports are followed.
-
-**Python import roots are detected, not assumed.** A declared layout in `pyproject.toml` or `setup.cfg` is used when present. Falling back to a structural guess is recorded as a guess and weakens the confidence of what depends on it, rather than passing itself off as declared.
-
-Adding a language means implementing a parser against the registry interface — not modifying the pipeline.
-
-Adding an analysis means implementing the minimal `Analyzer` contract and registering it in
-an ordered tier. See `lib/analysis/analyzers/interface.ts`; capability requirements and
-dependencies are explicit, and dependencies must come from an earlier tier.
-
-The symbol index is not a call graph. Cartograph does not currently add call or reference
-edges between declarations; dependency geometry remains file-level and import-based.
-
----
-
-## What it deliberately does not do
-
-Cartograph's scope is narrow on purpose: **understand software architecture.** It is not an IDE, a compiler, a build system, a vulnerability scanner, a CI policy engine, or a coding assistant. It does not execute, lint, type-check, or modify your code.
-
-See [`docs/project-philosophy.md`](docs/project-philosophy.md) for the principles these constraints come from.
-
----
+Path aliases from `tsconfig.json` or `jsconfig.json` are resolved, and
+re-exports are followed. Python import roots are detected from declared
+layouts when available; structural guesses are recorded as lower-confidence
+evidence. Go package imports resolve to a deterministic representative file
+and are marked heuristic when the package contains multiple source files.
 
 ## Safety
 
 Uploaded archives are treated as hostile input.
 
-- **Never executed** — static parsing only.
-- **Zip extraction is validated** — path traversal and symlink escapes are rejected per entry, and every rejection is recorded and surfaced in the result rather than swallowed.
-- **Binary and unreadable files are detected** by content sniffing, not by extension.
-- **Resource limits** — 25 MB compressed upload, 250 MB extracted, 800 source files. Parsing runs in a worker pool under time bounds.
-- **The archive is deleted** after the analysis attempt, on success or failure. Only the result JSON persists.
-
----
+- **Never executed:** parsing only; no build, lint, type-check, or runtime
+  evaluation.
+- **Archive paths are validated:** traversal and symlink escapes are rejected
+  per entry and recorded in the result.
+- **Content is sniffed:** binary and unreadable files are detected by content,
+  not trusted extensions.
+- **Resource limits are explicit:** 25 MB compressed, 250 MB extracted, and
+  800 source files. Parsing runs in a bounded worker pool.
+- **Uploads are temporary:** the archive is deleted after the analysis attempt;
+  only the result JSON persists.
 
 ## Run locally
 
+Requirements: Node.js `>=22.3.0`.
+
 ```bash
 npm install
-cp .env.example .env.local   # PowerShell: Copy-Item .env.example .env.local
+cp .env.example .env.local
 npm run dev
 ```
 
-No external services are needed. With `BLOB_READ_WRITE_TOKEN` unset, uploads and results are kept on the local filesystem under `.data/`.
+PowerShell users can copy the environment template with:
 
-To exercise the Vercel Blob path locally, set `BLOB_READ_WRITE_TOKEN` to a token for a **public** Blob store. The browser then uploads the zip directly to Blob using a short-lived token from `/api/upload-url`, so the archive never passes through a Serverless Function and its 4.5 MB body limit.
+```powershell
+Copy-Item .env.example .env.local
+npm.cmd run dev
+```
+
+Without `BLOB_READ_WRITE_TOKEN`, uploads and results use the local filesystem
+under `.data/`. To enable the AI explanation action locally, add provider keys
+to `.env.local`:
+
+```dotenv
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+GROQ_API_KEY=
+GROQ_MODEL=openai/gpt-oss-120b
+OPEN_ROUTER_API_KEY=
+OPEN_ROUTER_MODEL=openrouter/free
+```
+
+Keep these variables server-side. Do not rename them to `NEXT_PUBLIC_*`.
 
 ## Deploy to Vercel
 
-1. Create a **public** Vercel Blob store and configure `BLOB_READ_WRITE_TOKEN` for the deployment environment.
-2. Deploy the Next.js app. The analysis routes request a 300-second duration, which requires Fluid Compute (300 s is the current Hobby maximum).
-3. Upload a zip.
+1. Create a public Vercel Blob store and set `BLOB_READ_WRITE_TOKEN` in the
+   deployment environment.
+2. Add the AI provider variables if you want AI explanations in production.
+3. Deploy the Next.js application.
 
-## Verification
+The analysis routes request a 300-second duration, which requires Fluid
+Compute on Vercel. The Go and Python tree-sitter WASM grammars are included in
+the production trace.
+
+## Verify changes
 
 ```bash
-npm test        # parsers, IR construction and validation, safety, workspace, conformance
+npm test
 npm run lint
 npm run build
 ```
 
-The suite includes conformance fixtures per language and determinism checks: the same repository must always produce the same graph.
-
----
+The test suite covers parser conformance, IR validation, deterministic layout,
+analysis safety, indexed queries, grounding validation, workspace navigation,
+and visual foundations.
 
 ## Project layout
 
-```
-app/                    Next.js App Router — pages and API routes
-components/             Diagram, search, upload, and workspace UI
-lib/analysis/           Discovery, parsing, orchestration, and render projection
-lib/analysis/analyzers/ Ordered capability-aware analyzer plugins
-lib/analysis/architecture-model/ Deterministic boundary records and query indexes
-lib/analysis/ir/        Versioned intermediate representation and its validation
-lib/analysis/parsers/   Per-language parsers behind one registry interface
-lib/safety/             Zip validation, content sniffing, resource guards, worker pool
-lib/storage/            Local filesystem and Vercel Blob backends
-docs/                   Philosophy, vision, roadmap, and specs
+```text
+app/                         Next.js App Router pages and API routes
+components/                  Diagram, search, upload, AI, and workspace UI
+lib/analysis/                Discovery, parsing, orchestration, and rendering
+lib/analysis/analyzers/      Capability-aware analyzer plugins
+lib/analysis/architecture-model/
+                             Deterministic boundaries and inference records
+lib/analysis/ir/              Versioned intermediate representation
+lib/analysis/parsers/        Language parsers behind one registry
+lib/ai/                      Read-only tools, providers, and grounding checks
+lib/safety/                  Archive validation and resource guards
+lib/storage/                 Local filesystem and Vercel Blob backends
+docs/                        Philosophy, vision, roadmap, and specifications
 ```
 
-Built with Next.js 15, React 19, `@xyflow/react` for the diagram, and `elkjs` for layout.
+Built with Next.js 16, React 19, `@xyflow/react`, and `elkjs`.
+
+## Scope
+
+Cartograph is a static architecture survey. It is not an IDE, compiler, build
+system, vulnerability scanner, CI policy engine, or coding assistant. See
+[`docs/project-philosophy.md`](docs/project-philosophy.md) for the reasoning
+behind these boundaries.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [`LICENSE`](LICENSE).
