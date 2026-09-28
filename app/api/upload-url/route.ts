@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { UNIQUE_UPLOAD_TOKEN_OPTIONS } from "@/lib/storage/uploadPathname";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,12 @@ export const runtime = "nodejs";
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
+  // Only token requests come from browsers. The completion callback comes
+  // from Vercel's servers and must never be throttled.
+  if (body.type === "blob.generate-client-token") {
+    const limited = enforceRateLimit(request, RATE_LIMITS.upload);
+    if (limited) return limited as NextResponse;
+  }
 
   try {
     const jsonResponse = await handleUpload({

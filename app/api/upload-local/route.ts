@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { MAX_UPLOAD_BYTES } from "@/lib/storage/local";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,8 @@ export const runtime = "nodejs";
  * analysis stream endpoint can pick it up.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  const limited = enforceRateLimit(request, RATE_LIMITS.upload);
+  if (limited) return limited as NextResponse;
   try {
     const formData = await request.formData();
     const file = formData.get("file");

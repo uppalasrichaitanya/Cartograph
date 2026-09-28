@@ -1,4 +1,5 @@
 import { analyzeRepository, type ProgressPhase } from "@/lib/analysis/analyzeRepository";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,11 +21,17 @@ export async function POST(request: Request): Promise<Response> {
     const body = (await request.json()) as { zipPath?: unknown; repoName?: unknown; repoSizeBytes?: unknown };
     if (typeof body.zipPath !== "string") throw new Error("zipPath is required.");
     zipPath = body.zipPath;
-    if (typeof body.repoName === "string") repoName = body.repoName;
-    if (typeof body.repoSizeBytes === "number") repoSizeBytes = body.repoSizeBytes;
+    // Both are client-supplied display metadata: bound them before they are persisted.
+    if (typeof body.repoName === "string" && body.repoName.trim()) repoName = body.repoName.trim().slice(0, 120);
+    if (typeof body.repoSizeBytes === "number" && Number.isFinite(body.repoSizeBytes) && body.repoSizeBytes >= 0) {
+      repoSizeBytes = body.repoSizeBytes;
+    }
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: 400 });
   }
+
+  const limited = enforceRateLimit(request, RATE_LIMITS.analyze);
+  if (limited) return limited;
 
   const stream = new TransformStream();
   const writer = stream.writable.getWriter();

@@ -3,6 +3,7 @@ import { analyzeRepository } from "@/lib/analysis/analyzeRepository";
 import { StorageError } from "@/lib/storage";
 import { DiscoveryError } from "@/lib/analysis/discoverFiles";
 import { UnsafeZipError } from "@/lib/safety/safeUnzip";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 
 export const runtime = "nodejs";
 // Valid for Vercel's Fluid Compute default and leaves room for large, legitimate repositories.
@@ -19,6 +20,9 @@ export async function POST(request: Request) {
   if (typeof body.zipPath !== "string") {
     return NextResponse.json({ error: "zipPath is required." }, { status: 400 });
   }
+
+  const limited = enforceRateLimit(request, RATE_LIMITS.analyze);
+  if (limited) return limited;
 
   try {
     const result = await analyzeRepository(body.zipPath);
