@@ -108,13 +108,14 @@ function parseResponse(value: unknown): AiResponse {
   };
 }
 
-async function callProvider(config: ProviderConfig, prompt: string): Promise<AiResponse> {
-  const signal = AbortSignal.timeout(30_000);
+async function callProvider(config: ProviderConfig, prompt: string, timeoutMs: number): Promise<AiResponse> {
+  const signal = AbortSignal.timeout(timeoutMs);
   if (config.name === "gemini") {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.key)}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent`, {
       method: "POST",
       signal,
-      headers: { "Content-Type": "application/json" },
+      // Header rather than query string so the key never appears in request logs.
+      headers: { "Content-Type": "application/json", "x-goog-api-key": config.key },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         systemInstruction: { parts: [{ text: "You are Cartograph's evidence-bound architecture assistant. Return only valid JSON and never invent citations." }] },
@@ -140,13 +141,33 @@ async function callProvider(config: ProviderConfig, prompt: string): Promise<AiR
   return parseResponse(await readJsonResponse(response));
 }
 
-export async function generateAiResponse(prompt: string): Promise<AiProviderResult> {
+export type GenerateOptions = Readonly<{
+  /** Total time budget across the whole provider chain. */
+  budgetMs?: number;
+  /** Upper bound for a single provider attempt. */
+  perProviderMs?: number;
+  /** Throws to reject a response; the chain then falls through to the next provider. */
+  validate?: (response: AiResponse) => void;
+}>;
+
+const MIN_ATTEMPT_MS = 3_000;
+
+export async function generateAiResponse(prompt: string, options: GenerateOptions = {}): Promise<AiProviderResult> {
+  const { budgetMs = 40_000, perProviderMs = 20_000, validate } = options;
   const providers = configuredProviders();
   if (providers.length === 0) throw new Error("No AI provider is configured. Add a server-side provider key first.");
+  const deadline = Date.now() + budgetMs;
   const failures: string[] = [];
   for (const provider of providers) {
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_ATTEMPT_MS) {
+      failures.push(`${provider.name}: skipped, time budget exhausted`);
+      continue;
+    }
     try {
-      return { response: await callProvider(provider, prompt), provider: provider.name, model: provider.model };
+      const response = await callProvider(provider, prompt, Math.min(perProviderMs, remaining));
+      validate?.(response);
+      return { response, provider: provider.name, model: provider.model };
     } catch (error) {
       failures.push(`${provider.name}: ${error instanceof Error ? error.message : "request failed"}`);
     }
