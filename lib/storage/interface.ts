@@ -16,6 +16,23 @@ export interface StorageBackend {
 
   /** Delete a temporary upload artifact (best-effort). */
   deleteUpload(ref: string): Promise<void>;
+
+  /**
+   * Load a cached AI explanation for an analysis. `key` is a 64-character hex
+   * digest of the subject and prompt version. Returns null on a miss.
+   */
+  loadExplanation(analysisId: string, key: string): Promise<unknown | null>;
+
+  /** Cache an AI explanation (best-effort; failures are swallowed). */
+  saveExplanation(analysisId: string, key: string, value: unknown): Promise<void>;
+}
+
+const ANALYSIS_ID = /^[a-f0-9-]{36}$/i;
+const EXPLANATION_KEY = /^[a-f0-9]{64}$/;
+
+/** Both parts become storage paths, so they are validated strictly. */
+export function isValidExplanationRef(analysisId: string, key: string): boolean {
+  return ANALYSIS_ID.test(analysisId) && EXPLANATION_KEY.test(key);
 }
 
 /** Re-export the error class so consumers don't import from a specific backend. */

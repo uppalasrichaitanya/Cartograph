@@ -48,3 +48,21 @@ test("malformed upload references are rejected", () => {
   assert.equal(isValidUploadReference("", "local"), false);
   assert.equal(isValidUploadReference("not a URL", "blob"), false);
 });
+
+test("Blob upload references are pinned to this deployment's own store", () => {
+  const saved = process.env.BLOB_READ_WRITE_TOKEN;
+  process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_AbC123_secret";
+  try {
+    assert.equal(
+      isValidUploadReference("https://abc123.public.blob.vercel-storage.com/uploads/r/project.zip", "blob"),
+      true,
+    );
+    assert.equal(
+      isValidUploadReference("https://someoneelse.public.blob.vercel-storage.com/uploads/r/project.zip", "blob"),
+      false,
+    );
+  } finally {
+    if (saved === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = saved;
+  }
+});

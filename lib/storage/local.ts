@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { AnalysisResult } from "@/types/graph";
 import type { StorageBackend } from "./interface";
-import { StorageError } from "./interface";
+import { StorageError, isValidExplanationRef } from "./interface";
 
 export { StorageError };
 export { MAX_UPLOAD_BYTES } from "./interface";
@@ -42,6 +42,30 @@ export class LocalStorage implements StorageBackend {
       await rm(filePath, { force: true });
     } catch {
       // Best-effort cleanup; not critical.
+    }
+  }
+
+  private explanationPath(analysisId: string, key: string): string {
+    return path.join(path.dirname(this.dataDir), "explanations", analysisId, `${key}.json`);
+  }
+
+  async loadExplanation(analysisId: string, key: string): Promise<unknown | null> {
+    if (!isValidExplanationRef(analysisId, key)) return null;
+    try {
+      return JSON.parse(await readFile(this.explanationPath(analysisId, key), "utf8")) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveExplanation(analysisId: string, key: string, value: unknown): Promise<void> {
+    if (!isValidExplanationRef(analysisId, key)) return;
+    const filePath = this.explanationPath(analysisId, key);
+    try {
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, JSON.stringify(value), "utf8");
+    } catch {
+      // A cache write failing must never fail the request that produced it.
     }
   }
 }
