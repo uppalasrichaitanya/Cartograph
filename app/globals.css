@@ -1654,12 +1654,40 @@ h1, h2, h3, p { margin-top: 0; }
 .ai-result .assisted-note { margin-top: 0; }
 .ai-claims { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
 .ai-claims li { padding-top: var(--space-2); border-top: 1px dashed var(--rule); }
-/* Claims are prose; opt out of the single-line file-list treatment from `.detail-panel li`. */
-.detail-panel .ai-claims li { min-width: 0; white-space: normal; }
-.ai-claims p { margin: 0 0 var(--space-2); color: var(--ink-muted); font-size: var(--text-small); line-height: 1.5; }
+/* Claims and reading steps are prose; opt out of the single-line file-list treatment from `.detail-panel li`. */
+.detail-panel .ai-claims li,
+.detail-panel .ai-reading-order li { min-width: 0; white-space: normal; }
+.ai-claims p { margin: 0 0 var(--space-2); color: var(--ink); font-size: var(--text-small); line-height: 1.55; }
+.ai-section { margin-top: var(--space-5); }
 .ai-citations { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.ai-citations code { max-width: 100%; overflow: hidden; padding: 2px var(--space-1); color: var(--ink-muted); background: var(--assisted-wash); font-size: var(--text-micro); text-overflow: ellipsis; white-space: nowrap; }
-.ai-provider { margin-top: var(--space-4); color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
+/* Citations are links back to measured evidence, so they read as controls. */
+.ai-chip {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--assisted);
+  background: var(--assisted-wash);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ai-chip:hover { border-color: var(--rule-strong); }
+.ai-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ai-chip.is-region { border-style: dashed; border-color: var(--rule-strong); background: transparent; }
+.ai-chip.is-static { cursor: default; }
+.ai-reading-order { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.ai-reading-order li { display: grid; gap: var(--space-1); counter-increment: step; }
+.ai-reading-order li::before { content: "Step " counter(step); color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); letter-spacing: 0.06em; }
+.ai-reading-order p { margin: 0; color: var(--ink-muted); font-size: var(--text-caption); line-height: 1.5; }
+.ai-uncertainty { margin-top: var(--space-5); }
+.ai-hint,
+.ai-disclaimer { margin: var(--space-4) 0 0; color: var(--ink-faint); font-size: var(--text-caption); line-height: 1.5; }
+.ai-disclaimer { padding-top: var(--space-3); border-top: 1px dashed var(--rule); }
+.ai-provider { margin: var(--space-2) 0 var(--space-3); color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
 
 /* ─── Detail Panel ─────────────────────────────────────────────────────
  *
@@ -2294,3 +2322,4 @@ h1, h2, h3, p { margin-top: 0; }
   .rail-search-label, .rail-search-kbd { display: none; }
   .context-cluster { max-width: calc(100% - 1.5rem); bottom: .7rem; left: .7rem; }
 }
+.ai-result p code { padding: 0 3px; border-radius: 3px; background: var(--well); font-family: var(--type-mono); font-size: var(--text-caption); font-style: normal; }

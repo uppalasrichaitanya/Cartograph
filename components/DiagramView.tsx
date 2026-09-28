@@ -329,7 +329,9 @@ function DiagramInner({
    * than scheduling a zero-length wait, so no intermediate faded frame is ever
    * committed. */
   const pendingRegionChange = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const changeRegion = useCallback((next: string | null) => {
+  /** Set when a region change lands; consumed once the new region can be framed. */
+  const pendingFit = useRef(false);
+  const changeRegion = useCallback((next: string | null, fitOnArrival = true) => {
     if (pendingRegionChange.current !== null) {
       clearTimeout(pendingRegionChange.current);
       pendingRegionChange.current = null;
@@ -339,6 +341,7 @@ function DiagramInner({
     setHoveredFileId(null);
     if (leg <= 0) {
       setIsFading(false);
+      pendingFit.current = fitOnArrival;
       setFolder(next);
       return;
     }
@@ -346,6 +349,7 @@ function DiagramInner({
     setIsFading(true);
     pendingRegionChange.current = setTimeout(() => {
       pendingRegionChange.current = null;
+      pendingFit.current = fitOnArrival;
       setFolder(next);
       setIsFading(false);
     }, leg);
@@ -419,6 +423,8 @@ function DiagramInner({
     const node = reactFlowInstance.getNode(targetId);
     if (!node) return;
     pendingFocus.current = null;
+    // Framing the node replaces framing the region it lives in.
+    pendingFit.current = false;
 
     // Connective, not structural. The structural part — the region being
     // replaced — has already happened and been paid for. This is the arrival
@@ -437,6 +443,24 @@ function DiagramInner({
       { zoom, ...cameraMotion("connective") },
     );
   }, [nodesInitialized, nodes, reactFlowInstance]);
+
+  /* ─── Framing a region you have just entered ───
+   *
+   * Without this, the camera kept the previous region's framing, so entering
+   * a region landed zoomed into an arbitrary corner of it. Only a load with
+   * no camera in the address was fitted (by React Flow's mount-time fitView).
+   *
+   * Same precondition as pendingFocus: the new region's nodes must be on
+   * screen and measured. Arriving at a specific node takes precedence, since
+   * that path frames the node itself. */
+  useEffect(() => {
+    if (!pendingFit.current || pendingFocus.current || !nodesInitialized) return;
+    // The old region's nodes can still be measured for one render after the
+    // region changes; act only once the nodes on screen are the new ones.
+    if (nodes.length !== initial.nodes.length || nodes[0]?.id !== initial.nodes[0]?.id) return;
+    pendingFit.current = false;
+    void reactFlowInstance.fitView({ padding: 0.12, ...cameraMotion("connective") });
+  }, [nodesInitialized, nodes, initial.nodes, reactFlowInstance]);
 
   /* ─── Evidence behind the selected file ───
    * Read from the IR on selection. Null when no IR is available, which the
@@ -601,7 +625,8 @@ function DiagramInner({
       // by clicking a region does — Motion P8 asks for the same visual logic
       // in both directions, and sharing the implementation is the only way
       // that stays true as either side changes.
-      if (crossesRegion) changeRegion(position.region);
+      // A restored camera wins over fitting the region on arrival.
+      if (crossesRegion) changeRegion(position.region, !position.camera);
       setSelectedFile(
         position.file
           ? graphQuery.getNode(position.file) ?? null
@@ -888,6 +913,17 @@ function DiagramInner({
   const goToFolderOverview = useCallback(() => {
     changeRegion(null);
   }, [changeRegion]);
+
+  /* Opening a region from outside the map (an AI citation). Clears the file
+   * selection so the region itself becomes the subject. */
+  const navigateToRegion = useCallback((region: string) => {
+    setSelectedFile(null);
+    setSelectedSymbolId(null);
+    if (region !== folder) {
+      changeRegion(region);
+      recordExamined("region", region);
+    }
+  }, [folder, changeRegion, recordExamined]);
 
   /* ─── Toggle highlight mode (Issue 3, 4) ─── */
   const toggleHighlight = useCallback((mode: HighlightMode) => {
@@ -1395,7 +1431,10 @@ function DiagramInner({
         <AiExplanationPanel
           analysisId={result.id}
           file={selectedFile}
+          region={folder}
           onClose={() => setAiOpen(false)}
+          onNavigateToFile={navigateToNode}
+          onNavigateToRegion={navigateToRegion}
         />
       )}
 
