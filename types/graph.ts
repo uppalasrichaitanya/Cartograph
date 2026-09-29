@@ -196,6 +196,12 @@ export type AnalysisResult = {
   renderData: RenderData;
   repoMeta: RepoMeta;
   /**
+   * When this analysis stops being served. Absent on analyses made before
+   * retention existed, which never expire. `expiresAt: null` means the
+   * uploader chose to keep it until they delete it.
+   */
+  retention?: { expiresAt: string | null };
+  /**
    * The validated, versioned Intermediate Representation built alongside
    * the existing DependencyGraph. Optional for two distinct reasons:
    * analyses saved before Phase 7 do not have it, and IR construction can

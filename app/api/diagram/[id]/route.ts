@@ -2,6 +2,7 @@ import { DiagramOptionsError, DiagramScopeError, parseDiagramOptions, renderDiag
 import { isStoredReview, reviewAnnotations, reviewCacheKey } from "@/lib/diagram/review";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 import { getStorage } from "@/lib/storage";
+import { loadLiveAnalysis } from "@/lib/storage/live";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -24,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const limited = enforceRateLimit(request, RATE_LIMITS.diagram);
   if (limited) return limited;
 
-  const result = await getStorage().loadAnalysis(id);
+  const result = await loadLiveAnalysis(getStorage(), id);
   if (!result) return Response.json({ error: "This analysis no longer exists." }, { status: 404 });
 
   let rendered;

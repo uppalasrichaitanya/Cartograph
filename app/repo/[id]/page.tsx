@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { DiagramView } from "@/components/DiagramView";
 import { hasAiProvider } from "@/lib/ai/provider";
 import { getStorage } from "@/lib/storage";
+import { loadLiveAnalysis } from "@/lib/storage/live";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function RepositoryPage({
   }
   let result;
   try {
-    result = await getStorage().loadAnalysis(id);
+    result = await loadLiveAnalysis(getStorage(), id);
   } catch {
     notFound();
   }
