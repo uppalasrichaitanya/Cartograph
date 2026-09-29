@@ -355,7 +355,119 @@ export function buildDiagramModel(
   return finish(result, options, evidence, built);
 }
 
-// Region scope is added in Task 4.
-function regionUnits(_result: AnalysisResult, _options: DiagramOptions, id: string, _evidence: DiagramEvidence): Built {
-  throw new DiagramScopeError(`Region ${id} is not supported yet.`);
+function regionUnits(result: AnalysisResult, options: DiagramOptions, id: string, evidence: DiagramEvidence): Built {
+  const cluster = result.clusters.find((candidate) => candidate.name === id);
+  if (!cluster) throw new DiagramScopeError("The requested region is not part of this analysis.");
+  const members = [...cluster.fileIds].sort(byString);
+  const production = members.filter((path) => !isTestPath(path));
+  // A test-only region is still worth drawing: hiding every file would draw nothing.
+  const shown = options.includeTests || production.length === 0 ? members : production;
+  const shownSet = new Set(shown);
+  const memberSet = new Set(members);
+
+  const degree = new Map<string, number>();
+  for (const edge of result.graph.edges) {
+    if (shownSet.has(edge.from)) degree.set(edge.from, (degree.get(edge.from) ?? 0) + 1);
+    if (shownSet.has(edge.to)) degree.set(edge.to, (degree.get(edge.to) ?? 0) + 1);
+  }
+  const budget = BUDGETS[options.preset].files;
+  const ranked = [...shown].sort((a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0) || byString(a, b));
+  const visible = shown.length > budget ? ranked.slice(0, budget - 1) : ranked;
+  const hidden = shown.length > budget ? ranked.slice(budget - 1) : [];
+
+  // One level of sub-folder groups, relative to the region's own folder.
+  const base = members.every((path) => path.startsWith(`${cluster.name}/`)) ? cluster.name : "";
+  const subfolderOf = (path: string): string | null => {
+    const rest = base ? path.slice(base.length + 1) : path;
+    const segments = rest.split("/");
+    return segments.length > 1 ? (base ? `${base}/${segments[0]}` : segments[0]) : null;
+  };
+  const subfolders = [...new Set(visible.map(subfolderOf).filter((sub): sub is string => sub !== null))].sort(byString);
+  const useGroups = subfolders.length > 1;
+  const groups: DiagramGroup[] = useGroups
+    ? subfolders.map((sub) => ({
+        id: `g:${sub}`, path: sub, label: base ? sub.slice(base.length + 1) : sub, parentId: null,
+        files: visible.filter((path) => subfolderOf(path) === sub).length,
+      }))
+    : [];
+
+  const drafts: Draft[] = visible.map((path) => {
+    const sub = useGroups ? subfolderOf(path) : null;
+    return {
+      id: `f:${path}`, kind: "file", label: path.split("/").pop() ?? path, path,
+      groupId: sub ? `g:${sub}` : null, depth: sub ? 1 : 0, files: [path], folder: null,
+    };
+  });
+  if (hidden.length > 0) {
+    drafts.push({
+      id: "u:#overflow", kind: "overflow", label: `+ ${hidden.length} more files`, path: "",
+      groupId: null, depth: 0, files: hidden, folder: null,
+    });
+  }
+
+  const unitOfShown = new Map<string, string>();
+  for (const draft of drafts) for (const file of draft.files) unitOfShown.set(file, draft.id);
+  const folderOf = new Map(result.graph.nodes.map((node) => [node.path, node.folder]));
+  const clusterSize = new Map(result.clusters.map((candidate) => [candidate.name, candidate.fileIds.length]));
+  const extraEdges = new Map<string, { count: number; samples: string[] }>();
+  const boundaries = new Map<string, Draft>();
+  const addExtra = (from: string, to: string, sample: string | null, count = 1) => {
+    const key = `${from}\0${to}`;
+    const entry = extraEdges.get(key) ?? { count: 0, samples: [] };
+    entry.count += count;
+    if (sample) entry.samples.push(sample);
+    extraEdges.set(key, entry);
+  };
+  const boundary = (neighbour: string, side: "in" | "out"): string => {
+    const unitId = `b:${side}:${neighbour}`;
+    if (!boundaries.has(unitId)) {
+      boundaries.set(unitId, {
+        id: unitId, kind: "boundary", label: neighbour, path: neighbour, groupId: null, depth: 0,
+        files: [], folder: null, side, fileCount: clusterSize.get(neighbour) ?? 0,
+      });
+    }
+    return unitId;
+  };
+
+  for (const edge of result.graph.edges) {
+    const fromInside = memberSet.has(edge.from);
+    const toInside = memberSet.has(edge.to);
+    if (fromInside === toInside) continue;
+    const insidePath = fromInside ? edge.from : edge.to;
+    const insideUnit = unitOfShown.get(insidePath);
+    if (!insideUnit) continue; // a hidden test file
+    const neighbour = folderOf.get(fromInside ? edge.to : edge.from);
+    if (!neighbour || neighbour === cluster.name) continue;
+    if (fromInside) addExtra(insideUnit, boundary(neighbour, "out"), edge.id);
+    else addExtra(boundary(neighbour, "in"), insideUnit, edge.id);
+  }
+
+  let unresolvedTotal = 0;
+  for (const path of shown) {
+    const count = evidence.unresolved.get(path) ?? 0;
+    const unit = unitOfShown.get(path);
+    if (count === 0 || !unit) continue;
+    unresolvedTotal += count;
+    addExtra(unit, "u:#unresolved", null, count);
+  }
+  if (unresolvedTotal > 0) {
+    drafts.push({
+      id: "u:#unresolved", kind: "unresolved", label: `${unresolvedTotal} unresolved imports`, path: "",
+      groupId: null, depth: 0, files: [], folder: null, fileCount: 0,
+    });
+  }
+  drafts.push(...[...boundaries.values()].sort((a, b) => byString(a.id, b.id)));
+
+  const language = result.repoMeta.language ? ` · ${result.repoMeta.language}` : "";
+  return {
+    groups,
+    drafts,
+    extraEdges,
+    omittedFiles: hidden.length,
+    hiddenTests: members.length - shown.length,
+    oversizedUnitIds: [],
+    title: `${result.repoMeta.repoName} · ${cluster.name}`,
+    subtitle: `Region detail · ${shown.length} files${language}`,
+    includedFiles: shown,
+  };
 }
