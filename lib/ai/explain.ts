@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isTestPath } from "@/lib/analysis/folderTree";
 import type { AnalysisResult, GraphNode } from "@/types/graph";
 import { createAiQueryContext, dropUnsupportedFigures, evidenceNumbers, validateCitation } from "./grounding";
 import { computeImpact, getNeighbors } from "./tools";
@@ -53,12 +54,6 @@ export type ExplainPrompt = Readonly<{
 export function explanationCacheKey(subject: ExplainSubject): string {
   const id = subject.kind === "overview" ? "" : subject.id;
   return createHash("sha256").update(`v${EXPLAIN_PROMPT_VERSION}\0${subject.kind}\0${id}`).digest("hex");
-}
-
-const TEST_PATH = /(^|\/)(tests?|__tests__|specs?|e2e)\/|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(go|py)$/i;
-
-function isTestPath(path: string): boolean {
-  return TEST_PATH.test(path);
 }
 
 function top<T>(items: Iterable<T>, limit: number, score: (item: T) => number, tieBreak: (item: T) => string): T[] {
