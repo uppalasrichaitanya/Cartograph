@@ -50,7 +50,7 @@ import { BreadcrumbNav } from "./BreadcrumbNav";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SearchOverlay } from "./SearchOverlay";
 import { ZoomControls } from "./ZoomControls";
-import { DownloadIcon, LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
+import { CloseIcon, DownloadIcon, LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
 import { ExportDialog } from "./ExportDialog";
 import { copyShareLink } from "@/lib/workspace/share";
 import { forgetOwnerToken, loadOwnerToken, saveOwnerToken, takeOwnerFragment } from "@/lib/workspace/ownerToken";
@@ -347,8 +347,9 @@ function DiagramInner({
     // same markup; the setters run in a microtask, not the effect body.
     // An owner link from another device: store the token, then strip it from the address bar.
     const fromFragment = takeOwnerFragment(window.location.hash);
-    if (fromFragment) {
-      saveOwnerToken(result.id, fromFragment);
+    if (fromFragment) saveOwnerToken(result.id, fromFragment);
+    // A malformed owner fragment is stripped too; it must not linger in the address bar.
+    if (fromFragment || /(^|[#&])owner=/.test(window.location.hash)) {
       history.replaceState(history.state, "", window.location.pathname + window.location.search);
     }
     let marker: string | null = null;
@@ -360,32 +361,61 @@ function DiagramInner({
     });
   }, [result.id]);
 
+  const deleting = useRef(false);
   const deleteAnalysis = useCallback(async () => {
-    if (!ownerToken) return;
+    if (!ownerToken || deleting.current) return;
+    deleting.current = true;
     setDeleteError(null);
-    const response = await fetch(`/api/analysis/${result.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${ownerToken}` } });
-    if (response.status === 204) {
-      forgetOwnerToken(result.id);
-      router.push("/?deleted=1");
-      return;
+    try {
+      const response = await fetch(`/api/analysis/${result.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${ownerToken}` } });
+      if (response.status === 204) {
+        forgetOwnerToken(result.id);
+        router.push("/?deleted=1");
+        return;
+      }
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      setDeleteError(body.error ?? "The analysis could not be deleted.");
+    } catch {
+      setDeleteError("Could not reach Cartograph. Try again.");
     }
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    deleting.current = false;
     setConfirmDelete(false);
-    setDeleteError(body.error ?? "The analysis could not be deleted.");
   }, [ownerToken, result.id, router]);
+
+  /* A delete error goes away by itself after a few seconds. */
+  useEffect(() => {
+    if (!deleteError) return;
+    const timer = window.setTimeout(() => setDeleteError(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [deleteError]);
+
+  const moreButton = useRef<HTMLButtonElement>(null);
 
   /* The "···" menu closes on Escape or a click elsewhere. */
   useEffect(() => {
     if (!moreOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMoreOpen(false); };
+    document.querySelector<HTMLElement>(".rail-menu [role=menuitem]")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Captured and stopped so the global Escape handler does not also close search or panels.
+      e.stopPropagation();
+      e.preventDefault();
+      setMoreOpen(false);
+      moreButton.current?.focus();
+    };
+    const close = () => setMoreOpen(false);
     const onPointer = (e: PointerEvent) => {
       if (!(e.target instanceof Element) || !e.target.closest(".rail-more")) setMoreOpen(false);
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
     };
   }, [moreOpen]);
 
@@ -1336,9 +1366,10 @@ function DiagramInner({
           </button>
           {ownerToken && (
             <div className="rail-more">
-              <button type="button" className="rail-button" aria-haspopup="menu" aria-expanded={moreOpen} aria-label="More actions" onClick={(event) => {
+              <button ref={moreButton} type="button" className="rail-button" aria-haspopup="menu" aria-expanded={moreOpen} aria-label="More actions" onClick={(event) => {
                 const box = event.currentTarget.getBoundingClientRect();
                 setMenuPos({ top: box.bottom + 4, right: window.innerWidth - box.right });
+                setDeleteError(null);
                 setMoreOpen((open) => !open);
               }}>···</button>
               {moreOpen && (
@@ -1609,7 +1640,12 @@ function DiagramInner({
           onCancel={() => setConfirmDelete(false)}
         />
       )}
-      {deleteError && <p className="rail-error" role="alert">{deleteError}</p>}
+      {deleteError && (
+        <p className="rail-error" role="alert">
+          {deleteError}
+          <button type="button" className="icon-button" aria-label="Dismiss error" onClick={() => setDeleteError(null)}><CloseIcon size={12} /></button>
+        </p>
+      )}
       {newUpload && ownerToken && (
         <OwnerNotice
           analysisId={result.id}

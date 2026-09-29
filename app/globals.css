@@ -2402,8 +2402,8 @@ h1, h2, h3, p { margin-top: 0; }
 .rail-menu button { width: 100%; padding: var(--space-2) var(--space-3); border: 0; background: none; text-align: left; font-size: var(--text-small); cursor: pointer; border-radius: var(--radius-control); }
 .rail-menu-danger { color: var(--danger); }
 .rail-menu-danger:hover { background: var(--danger-wash); }
-.rail-error { position: fixed; top: 64px; right: var(--space-4); z-index: 40; margin: 0; padding: var(--space-2) var(--space-3); color: var(--danger); background: var(--danger-wash); border-radius: var(--radius-control); font-size: var(--text-small); }
-.owner-notice { position: fixed; left: 50%; top: 68px; z-index: 35; transform: translateX(-50%); display: flex; gap: var(--space-3); align-items: center; max-width: min(720px, calc(100vw - var(--space-6))); padding: var(--space-3) var(--space-4); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-plate); box-shadow: var(--shadow-raised); font-size: var(--text-small); color: var(--ink-muted); }
+.rail-error { display: flex; gap: var(--space-2); align-items: center; position: fixed; top: calc(var(--rail-height) + var(--space-3)); right: var(--space-4); z-index: 40; margin: 0; padding: var(--space-2) var(--space-3); color: var(--danger); background: var(--danger-wash); border-radius: var(--radius-control); font-size: var(--text-small); }
+.owner-notice { position: fixed; left: 50%; top: calc(var(--rail-height) + var(--space-3)); z-index: 35; transform: translateX(-50%); display: flex; gap: var(--space-3); align-items: center; max-width: min(720px, calc(100vw - var(--space-6))); padding: var(--space-3) var(--space-4); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-plate); box-shadow: var(--shadow-raised); font-size: var(--text-small); color: var(--ink-muted); }
 .owner-notice p { margin: 0; }
 .home-notice { margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3); color: var(--forest); background: var(--forest-wash); border-radius: var(--radius-control); font-size: var(--text-small); }
 @media (max-width: 520px) { .owner-notice { flex-wrap: wrap; } }
