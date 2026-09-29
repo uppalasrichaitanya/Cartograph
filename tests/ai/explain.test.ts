@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildExplainPrompt, explanationCacheKey, finalizeExplanation, ExplainSubjectError } from "../../lib/ai/explain";
+import { buildExplainPrompt, EXPLAIN_PROMPT_VERSION, explanationCacheKey, finalizeExplanation, ExplainSubjectError } from "../../lib/ai/explain";
 import { generateAiResponse, parseResponse, resetProviderCooldowns } from "../../lib/ai/provider";
 import { dropUnsupportedFigures, evidenceNumbers } from "../../lib/ai";
 import type { AnalysisResult } from "../../types/graph";
@@ -170,4 +170,11 @@ test("a rate-limited provider is tried last until its cooldown passes", async ()
     process.env = saved.env;
     resetProviderCooldowns();
   }
+});
+
+test("region prompts describe regions as folder groups, not top-level folders", () => {
+  assert.equal(EXPLAIN_PROMPT_VERSION, 3);
+  const prompt = buildExplainPrompt(hubResult(), { kind: "region", id: "src" });
+  assert.match(prompt.prompt, /a folder group/);
+  assert.doesNotMatch(prompt.prompt, /top-level/);
 });
