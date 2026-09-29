@@ -72,10 +72,13 @@ function Segmented<T extends string>({ label, value, choices, onChange }: {
   );
 }
 
-export function ExportDialog({ analysisId, repoName, region, onClose }: {
+type Review = { summary: string; notes: { text: string; subjects: string[] }[]; dropped: number; cached: boolean };
+
+export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClose }: {
   analysisId: string;
   repoName: string;
   region: string | null;
+  aiConfigured: boolean;
   onClose: () => void;
 }) {
   const [options, setOptions] = useState<DiagramOptions>(() => ({
@@ -89,6 +92,11 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [review, setReview] = useState<Review | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewMissing, setReviewMissing] = useState(false);
+  // Bumped after a review so the preview refetches (an unknown param busts the browser cache).
+  const [previewNonce, setPreviewNonce] = useState(0);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const update = useCallback((patch: Partial<DiagramOptions>) => {
@@ -110,7 +118,7 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const response = await fetch(apiUrl("svg"), { signal: controller.signal });
+        const response = await fetch(`${apiUrl("svg")}&n=${previewNonce}`, { signal: controller.signal });
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as { error?: string };
           throw new Error(body.error ?? "The diagram could not be created.");
@@ -122,6 +130,7 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
           if (previous) URL.revokeObjectURL(previous);
           return URL.createObjectURL(new Blob([text], { type: "image/svg+xml" }));
         });
+        setReviewMissing(response.headers.get("X-Cartograph-Review") === "missing");
         setError(null);
       } catch (caught) {
         if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "The diagram could not be created.");
@@ -130,7 +139,7 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
       }
     }, 250);
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [apiUrl]);
+  }, [apiUrl, previewNonce]);
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
@@ -189,6 +198,27 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
     flash((await copyShareLink(embed)) ? "Embed link copied" : "Copy failed");
   };
 
+  const runReview = async (refresh = false) => {
+    setReviewing(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/diagram/${analysisId}/review?${diagramQuery(options, "svg")}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      });
+      const body = (await response.json()) as Review & { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "AI review failed.");
+      setReview(body);
+      if (options.annotations !== "measured+ai") update({ annotations: "measured+ai" });
+      setPreviewNonce((n) => n + 1);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "AI review failed.");
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   const findingsNote = scale !== null && options.preset === "slide" && scale < 0.6
     ? "Too detailed to read on a slide. Switch Detail to Overview."
     : null;
@@ -210,6 +240,7 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
         </header>
 
         <div className="export-body">
+          <div className="export-main">
           <figure className={`export-preview ${loading ? "is-loading" : ""}`}>
             {/* A blob: URL of the exported SVG; next/image cannot optimise it. */}
             {previewUrl ? (
@@ -219,6 +250,37 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
             {findingsNote && <figcaption className="export-warning">{findingsNote}</figcaption>}
             {error && <figcaption className="export-error" role="alert">{error}</figcaption>}
           </figure>
+
+          <section className="export-review" aria-label="AI review">
+            <button
+              type="button"
+              className="rail-button rail-button-assisted"
+              onClick={() => runReview(review !== null)}
+              disabled={!aiConfigured || reviewing}
+              title={aiConfigured ? undefined : "AI review is not configured on this deployment."}
+            >
+              {reviewing ? "Reviewing..." : review ? "Regenerate AI review" : "Review with AI"}
+            </button>
+            {reviewMissing && !review && <p className="export-hint">Run the AI review to add captions and notes to this figure.</p>}
+            {review && (
+              <div className="assisted-note export-review-body">
+                {review.summary && <p className="export-review-summary">{review.summary}</p>}
+                <ol className="export-review-notes">
+                  {review.notes.map((note) => (
+                    <li key={note.text}>
+                      <span className="export-ai-tag">AI</span> {note.text}
+                      <span className="export-review-subjects">{note.subjects.map((id) => id.replace(/\b[a-z]:/g, "").replace("->", " → ")).join(" · ")}</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="export-review-disclaimer">
+                  AI notes interpret the measured structure. They can be wrong, and they never change the diagram.
+                  {review.dropped > 0 ? ` ${review.dropped} ungrounded point${review.dropped === 1 ? " was" : "s were"} removed.` : ""}
+                </p>
+              </div>
+            )}
+          </section>
+          </div>
 
           <div className="export-controls">
             {region && (
@@ -237,7 +299,7 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
             )}
             <Segmented label="Theme" value={options.theme} choices={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }, { value: "print", label: "Print" }]}
               onChange={(theme) => update({ theme })} />
-            <Segmented label="Notes" value={options.annotations} choices={[{ value: "none", label: "None" }, { value: "measured", label: "Measured" }]}
+            <Segmented label="Notes" value={options.annotations} choices={[{ value: "none", label: "None" }, { value: "measured", label: "Measured" }, { value: "measured+ai", label: "+ AI" }]}
               onChange={(annotations) => update({ annotations })} />
             <label className="export-check"><input type="checkbox" checked={options.background === "transparent"} onChange={(event) => update({ background: event.target.checked ? "transparent" : "solid" })} /> Transparent background</label>
             <label className="export-check"><input type="checkbox" checked={options.includeTests} onChange={(event) => update({ includeTests: event.target.checked })} /> Include tests</label>

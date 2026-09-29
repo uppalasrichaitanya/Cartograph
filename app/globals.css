@@ -1643,7 +1643,7 @@ h1, h2, h3, p { margin-top: 0; }
 .inference-popover { max-width: 360px; }
 .inference-disclaimer { margin: 0 0 var(--space-3); color: var(--ink-faint); font-size: var(--text-micro); line-height: 1.45; }
 .inference-group { display: grid; grid-template-columns: 72px 1fr auto; gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0; border-top: 1px dashed var(--line); }
-.inference-group-kind { color: var(--assisted); font-family: var(--type-mono); font-size: var(--text-micro); text-transform: uppercase; }
+.inference-group-kind, .export-ai-tag { color: var(--assisted); font-family: var(--type-mono); font-size: var(--text-micro); text-transform: uppercase; }
 .inference-group-name { color: var(--ink); font-weight: 500; }
 .inference-group-count { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
 
@@ -2038,6 +2038,14 @@ h1, h2, h3, p { margin-top: 0; }
 .export-preview-empty { display: grid; place-items: center; min-height: 320px; color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-caption); border: 1px dashed var(--rule); border-radius: var(--radius-control); }
 .export-warning { color: var(--amber); font-size: var(--text-small); }
 .export-error { color: var(--danger); font-size: var(--text-small); }
+.export-main { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
+.export-review { display: grid; gap: var(--space-2); justify-items: start; }
+.export-hint { margin: 0; color: var(--ink-faint); font-size: var(--text-small); }
+.export-review-body { width: 100%; margin-top: 0; }
+.export-review-summary { margin: 0 0 var(--space-2); color: var(--ink); font-size: var(--text-small); line-height: 1.5; }
+.export-review-notes { margin: 0; padding-left: var(--space-5); display: grid; gap: var(--space-2); color: var(--ink); font-size: var(--text-small); line-height: 1.5; }
+.export-review-subjects { display: block; color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
+.export-review-disclaimer { margin: var(--space-2) 0 0; color: var(--ink-faint); font-size: var(--text-caption); }
 .export-controls { display: grid; gap: var(--space-4); align-content: start; }
 .export-field { display: grid; gap: var(--space-1); }
 .export-field-label { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); letter-spacing: .08em; text-transform: uppercase; }

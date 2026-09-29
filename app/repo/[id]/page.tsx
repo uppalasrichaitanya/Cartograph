@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { DiagramView } from "@/components/DiagramView";
+import { hasAiProvider } from "@/lib/ai/provider";
 import { getStorage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -28,5 +29,5 @@ export default async function RepositoryPage({
     notFound();
   }
   if (!result) notFound();
-  return <DiagramView result={result} initialSearch={initialSearch.toString()} />;
+  return <DiagramView result={result} initialSearch={initialSearch.toString()} aiConfigured={hasAiProvider()} />;
 }

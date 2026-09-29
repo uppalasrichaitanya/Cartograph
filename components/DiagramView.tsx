@@ -263,9 +263,11 @@ function getConnectedIds(nodeId: string, edges: Edge[]): Set<string> {
 function DiagramInner({
   result,
   initialSearch,
+  aiConfigured,
 }: {
   result: AnalysisResult;
   initialSearch: string;
+  aiConfigured: boolean;
 }) {
   const router = useRouter();
   const graphQuery = useMemo(() => createGraphQuery(result.graph), [result.graph]);
@@ -1530,6 +1532,7 @@ function DiagramInner({
           analysisId={result.id}
           repoName={result.repoMeta.repoName}
           region={folder}
+          aiConfigured={aiConfigured}
           onClose={closeExport}
         />
       )}
@@ -1552,13 +1555,15 @@ function DiagramInner({
 export function DiagramView({
   result,
   initialSearch = "",
+  aiConfigured = false,
 }: {
   result: AnalysisResult;
   initialSearch?: string;
+  aiConfigured?: boolean;
 }) {
   return (
     <ReactFlowProvider>
-      <DiagramInner result={result} initialSearch={initialSearch} />
+      <DiagramInner result={result} initialSearch={initialSearch} aiConfigured={aiConfigured} />
     </ReactFlowProvider>
   );
 }
