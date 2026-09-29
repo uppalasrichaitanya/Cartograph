@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { AnalysisResult } from "@/types/graph";
 import type { OwnerRecord, StorageBackend } from "./interface";
-import { StorageError, isValidAnalysisId, isValidExplanationRef } from "./interface";
+import { StorageError, expiryDay, isValidAnalysisId, isValidExplanationRef } from "./interface";
 
 export { StorageError };
 export { MAX_UPLOAD_BYTES } from "./interface";
@@ -27,7 +27,7 @@ export class LocalStorage implements StorageBackend {
   }
 
   async loadAnalysis(id: string): Promise<AnalysisResult | null> {
-    if (!/^[a-f0-9-]{36}$/i.test(id)) return null;
+    if (!isValidAnalysisId(id)) return null;
     const filePath = path.join(this.dataDir, `${id}.json`);
     try {
       const data = await readFile(filePath, "utf8");
@@ -91,7 +91,8 @@ export class LocalStorage implements StorageBackend {
 
   async markExpiry(id: string, expiresAt: string): Promise<void> {
     if (!isValidAnalysisId(id)) return;
-    const day = expiresAt.slice(0, 10);
+    const day = expiryDay(expiresAt);
+    if (!day) return;
     await mkdir(this.sibling("expiry", day), { recursive: true });
     await writeFile(this.sibling("expiry", day, id), "", "utf8");
   }

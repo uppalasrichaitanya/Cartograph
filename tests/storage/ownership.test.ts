@@ -49,3 +49,12 @@ test("deleteAnalysis removes the analysis, its explanations, owner record, and m
     assert.deepEqual((await readdir(root)).sort(), ["analyses", "expiry", "explanations", "owners"]);
   });
 });
+
+test("markExpiry ignores a malformed date instead of writing outside expiry/", async () => {
+  await withStore(async (store, root) => {
+    await store.markExpiry(ID, "../../../..");
+    await store.markExpiry(ID, "not a date");
+    assert.deepEqual(await store.listExpiredIds(new Date("2099-01-01T00:00:00.000Z")), []);
+    assert.deepEqual(await readdir(root), []);
+  });
+});

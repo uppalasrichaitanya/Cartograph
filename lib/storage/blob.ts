@@ -1,7 +1,7 @@
 import { put, del, head, list } from "@vercel/blob";
 import type { AnalysisResult } from "@/types/graph";
 import type { OwnerRecord, StorageBackend } from "./interface";
-import { StorageError, isValidAnalysisId, isValidExplanationRef } from "./interface";
+import { StorageError, expiryDay, isValidAnalysisId, isValidExplanationRef } from "./interface";
 
 /*
  * Vercel Blob API notes (@vercel/blob 2.8.0, checked against its typings and source):
@@ -62,7 +62,7 @@ export class BlobStorage implements StorageBackend {
   }
 
   async loadAnalysis(id: string): Promise<AnalysisResult | null> {
-    if (!/^[a-f0-9-]{36}$/i.test(id)) return null;
+    if (!isValidAnalysisId(id)) return null;
     return (await readJson(`analyses/${id}.json`)) as AnalysisResult | null;
   }
 
@@ -114,7 +114,9 @@ export class BlobStorage implements StorageBackend {
     if (!isValidAnalysisId(id)) return;
     try {
       // put() rejects an empty body, so the marker holds one byte.
-      await put(`expiry/${expiresAt.slice(0, 10)}/${id}`, "1", { access: "public", addRandomSuffix: false });
+      const day = expiryDay(expiresAt);
+      if (!day) return;
+      await put(`expiry/${day}/${id}`, "1", { access: "public", addRandomSuffix: false });
     } catch {
       // The load-time check still enforces expiry; the marker only helps the sweep.
     }

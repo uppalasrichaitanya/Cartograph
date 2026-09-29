@@ -3,6 +3,14 @@ import type { AnalysisResult } from "@/types/graph";
 /** The stored proof of who may delete an analysis: a hash, never the token. */
 export type OwnerRecord = Readonly<{ tokenHash: string; createdAt: string }>;
 
+const EXPIRY_DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The YYYY-MM-DD part of an expiry timestamp, or null when malformed (it becomes a path segment). */
+export function expiryDay(expiresAt: string): string | null {
+  const day = expiresAt.slice(0, 10);
+  return EXPIRY_DAY_PATTERN.test(day) ? day : null;
+}
+
 const ANALYSIS_ID_PATTERN = /^[a-f0-9-]{36}$/i;
 export function isValidAnalysisId(id: string): boolean {
   return ANALYSIS_ID_PATTERN.test(id);
