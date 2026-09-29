@@ -57,7 +57,9 @@ test("edges aggregate file imports between units; imports inside a unit are inte
 
 test("the edge budget keeps the heaviest edges and reports the rest", () => {
   // 12 folders; folder i imports folder j (i < j) from (j - i) files: 66 edges with varied weights.
+  // Ten unconnected folders keep any one folder from being "shared", so no arrow is set aside for that reason.
   const spec: Record<string, string[]> = {};
+  for (let i = 0; i < 10; i += 1) spec[`z${i}/f.ts`] = [];
   for (let i = 0; i < 12; i += 1) {
     for (let k = 0; k < 12; k += 1) spec[`d${String(i).padStart(2, "0")}/f${String(k).padStart(2, "0")}.ts`] = [];
   }
@@ -69,20 +71,51 @@ test("the edge budget keeps the heaviest edges and reports the rest", () => {
     }
   }
   const model = buildDiagramModel(makeResult(spec), opts({ detail: "overview" }));
-  assert.equal(model.edges.length, 40);
-  assert.equal(model.omitted.edges, 26);
+  assert.equal(model.edges.length, 28);
+  assert.equal(model.omitted.edges, 38);
+  assert.equal(model.omitted.sharedEdges, 0);
   const minKept = Math.min(...model.edges.map((edge) => edge.count));
   assert.ok(model.omitted.edgeMaxCount <= minKept);
 });
 
-test("units and edges in a loop are marked, and cycle edges survive the budget", () => {
+test("units and edges in a loop are marked, and mutual edges survive the budget", () => {
   const model = buildDiagramModel(makeResult({
     "a/1.ts": ["b/1.ts"], "a/2.ts": [], "a/3.ts": [],
     "b/1.ts": ["a/1.ts"], "b/2.ts": [], "b/3.ts": [],
     "c/1.ts": [], "c/2.ts": [], "c/3.ts": [],
   }), opts({ detail: "overview" }));
   assert.deepEqual(model.units.filter((unit) => unit.inCycle).map((unit) => unit.id), ["u:a", "u:b"]);
-  assert.ok(model.edges.every((edge) => edge.inCycle));
+  assert.ok(model.edges.every((edge) => edge.inCycle && edge.mutual));
+});
+
+test("only a genuine pair is mutual; a longer loop is in a cycle but not mutual", () => {
+  const model = buildDiagramModel(makeResult({
+    "a/1.ts": ["b/1.ts"], "a/2.ts": [], "b/1.ts": ["c/1.ts"], "b/2.ts": [], "c/1.ts": ["a/1.ts"], "c/2.ts": [],
+  }), opts({ detail: "overview" }));
+  assert.equal(model.edges.filter((edge) => edge.inCycle).length, 3);
+  assert.ok(model.edges.every((edge) => !edge.mutual));
+});
+
+test("a unit most parts import is shared: its incoming arrows are not drawn", () => {
+  const spec: Record<string, string[]> = { "types/t.ts": [] };
+  for (const name of ["a", "b", "c", "d"]) spec[`${name}/x.ts`] = ["types/t.ts"];
+  spec["a/y.ts"] = ["b/x.ts"];
+  const model = buildDiagramModel(makeResult(spec), opts({ detail: "overview" }));
+  const types = model.units.find((unit) => unit.id === "u:types");
+  assert.equal(types?.sharedBy, 4);
+  assert.ok(model.edges.every((edge) => edge.to !== "u:types"));
+  assert.equal(model.omitted.sharedEdges, 4);
+  assert.ok(model.edges.some((edge) => edge.id === "e:u:a->u:b"));
+  assert.equal(model.units.find((unit) => unit.id === "u:a")?.sharedBy, undefined);
+});
+
+test("a mutual pair with a shared unit is set aside too, but the cycle is still reported", () => {
+  const spec: Record<string, string[]> = { "types/t.ts": ["a/x.ts"], "types/u.ts": [] };
+  for (const name of ["a", "b", "c", "d"]) spec[`${name}/x.ts`] = ["types/t.ts"];
+  const model = buildDiagramModel(makeResult(spec), opts({ detail: "overview" }));
+  assert.ok(model.edges.every((edge) => edge.from !== "u:types" && edge.to !== "u:types"));
+  assert.equal(model.omitted.sharedEdges, 5);
+  assert.ok(model.findings.some((finding) => finding.kind === "cycle"));
 });
 
 test("external packages are counted per importing file and exclude built-ins", () => {

@@ -56,9 +56,31 @@ function styleBlock(theme: DiagramTheme, embedFonts: boolean, italic: boolean): 
     + `</style>`;
 }
 
+const CORNER_RADIUS = 8;
+
+/** A polyline with each bend rounded by a quadratic curve, at most half of either neighbouring segment. */
+function roundedPath(points: ReadonlyArray<Point>): string {
+  let d = `M${num(points[0].x)} ${num(points[0].y)}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const [prev, at, next] = [points[i - 1], points[i], points[i + 1]];
+    const before = Math.hypot(at.x - prev.x, at.y - prev.y);
+    const after = Math.hypot(next.x - at.x, next.y - at.y);
+    const radius = Math.min(CORNER_RADIUS, before / 2, after / 2);
+    if (radius < 0.5) {
+      d += `L${num(at.x)} ${num(at.y)}`;
+      continue;
+    }
+    const entry = { x: at.x + ((prev.x - at.x) / before) * radius, y: at.y + ((prev.y - at.y) / before) * radius };
+    const exit = { x: at.x + ((next.x - at.x) / after) * radius, y: at.y + ((next.y - at.y) / after) * radius };
+    d += `L${num(entry.x)} ${num(entry.y)}Q${num(at.x)} ${num(at.y)} ${num(exit.x)} ${num(exit.y)}`;
+  }
+  const last = points[points.length - 1];
+  return `${d}L${num(last.x)} ${num(last.y)}`;
+}
+
 function edgePath(points: ReadonlyArray<Point>, curved: boolean): string {
   const [start, ...rest] = points;
-  if (!curved) return `M${num(start.x)} ${num(start.y)}${rest.map((point) => `L${num(point.x)} ${num(point.y)}`).join("")}`;
+  if (!curved) return roundedPath(points);
   let d = `M${num(start.x)} ${num(start.y)}`;
   for (let i = 0; i + 2 < rest.length; i += 3) {
     d += `C${num(rest[i].x)} ${num(rest[i].y)} ${num(rest[i + 1].x)} ${num(rest[i + 1].y)} ${num(rest[i + 2].x)} ${num(rest[i + 2].y)}`;
@@ -107,6 +129,8 @@ export function renderSvg(input: RenderSvgInput): RenderedSvg {
   const omissions: string[] = [];
   if (model.edges.length === 0) omissions.push("No internal imports were found.");
   if (model.omitted.testFiles > 0) omissions.push(`Tests hidden (${model.omitted.testFiles} files)`);
+  const sharedLabels = model.units.filter((unit) => unit.sharedBy).map((unit) => unit.label);
+  if (model.omitted.sharedEdges > 0 && sharedLabels.length > 0) omissions.push(`Arrows into shared parts (${sharedLabels.join(", ")}) are not drawn; each shows how many parts use it.`);
   if (model.omitted.edges > 0) omissions.push(`${model.omitted.edges} weaker connections (at most ${model.omitted.edgeMaxCount} imports each) not drawn`);
   if (model.omitted.files > 0) omissions.push(`${model.omitted.files} less-connected files grouped`);
   if (model.partialEvidence) omissions.push("Partial evidence (analysis predates confidence tracking)");
@@ -149,11 +173,11 @@ export function renderSvg(input: RenderSvgInput): RenderedSvg {
   const markers = new Set<string>();
   for (const { edge } of positioned.edges) {
     const stroke = edgeStroke(edge.count, preset);
-    const kind = edge.inCycle ? "cycle" : "plain";
+    const kind = edge.mutual ? "cycle" : "plain";
     const id = markerId(kind, stroke);
     if (!markers.has(id)) {
       markers.add(id);
-      parts.push(`<defs>${marker(kind, stroke, edge.inCycle ? theme.cycle : theme.inkMuted)}</defs>`);
+      parts.push(`<defs>${marker(kind, stroke, edge.mutual ? theme.cycle : theme.inkMuted)}</defs>`);
     }
   }
   if (!markers.has(markerId("plain", 1.25))) parts.push(`<defs>${marker("plain", 1.25, theme.inkMuted)}</defs>`);
@@ -184,9 +208,9 @@ export function renderSvg(input: RenderSvgInput): RenderedSvg {
   for (const { edge, points, curved, label } of positioned.edges) {
     const stroke = edgeStroke(edge.count, preset);
     const unresolved = edge.to === "u:#unresolved";
-    const color = edge.inCycle ? theme.cycle : theme.inkMuted;
-    const dash = unresolved ? ` stroke-dasharray="2 4"` : edge.inCycle && theme.cycleDash ? ` stroke-dasharray="${theme.cycleDash}"` : "";
-    const head = unresolved ? "" : ` marker-end="url(#${markerId(edge.inCycle ? "cycle" : "plain", stroke)})"`;
+    const color = edge.mutual ? theme.cycle : theme.inkMuted;
+    const dash = unresolved ? ` stroke-dasharray="2 4"` : edge.mutual && theme.cycleDash ? ` stroke-dasharray="${theme.cycleDash}"` : "";
+    const head = unresolved ? "" : ` marker-end="url(#${markerId(edge.mutual ? "cycle" : "plain", stroke)})"`;
     parts.push(`<path class="edge" d="${edgePath(points, curved)}" fill="none" stroke="${color}" stroke-width="${num(stroke)}" stroke-linecap="round"${dash}${head}/>`);
     if (label) {
       parts.push(`<rect x="${num(label.x)}" y="${num(label.y)}" width="${num(label.width)}" height="${num(label.height)}" rx="${num(label.height / 2)}" fill="${theme.ground}"/>`);
@@ -197,6 +221,7 @@ export function renderSvg(input: RenderSvgInput): RenderedSvg {
   const barUnits = model.units.filter((unit) => unit.kind === "folder" || unit.kind === "loose-files" || unit.kind === "file");
   const weightOf = (unit: DiagramUnit) => (unit.kind === "file" ? unit.lines : unit.files);
   const maxWeight = Math.max(1, ...barUnits.map(weightOf));
+  const mutualUnits = new Set(model.edges.filter((edge) => edge.mutual).flatMap((edge) => [edge.from, edge.to]));
   const markersByUnit = new Map<string, number[]>();
   notes.forEach((note, index) => {
     const subject = note.subjects.map((id) => (id.startsWith("e:") ? id.slice(2).split("->")[0] : id)).find((id) => positioned.units.has(id));
@@ -205,7 +230,7 @@ export function renderSvg(input: RenderSvgInput): RenderedSvg {
 
   for (const unit of model.units) {
     const box = positioned.units.get(unit.id);
-    if (box) parts.push(renderUnit(unit, box, { preset, theme, type, reserveCaption: positioned.reserveCaption, caption: captions.get(unit.id), barShare: barUnits.includes(unit) ? weightOf(unit) / maxWeight : null, noteNumbers: markersByUnit.get(unit.id) ?? [] }));
+    if (box) parts.push(renderUnit(unit, box, { preset, theme, type, reserveCaption: positioned.reserveCaption, caption: captions.get(unit.id), barShare: barUnits.includes(unit) ? weightOf(unit) / maxWeight : null, noteNumbers: markersByUnit.get(unit.id) ?? [], mutual: mutualUnits.has(unit.id) }));
   }
   parts.push(`</g>`);
 
@@ -240,6 +265,8 @@ type UnitContext = Readonly<{
   caption: string | undefined;
   barShare: number | null;
   noteNumbers: ReadonlyArray<number>;
+  /** The unit has at least one arrow that is answered by an arrow back. */
+  mutual: boolean;
 }>;
 
 function renderUnit(unit: DiagramUnit, box: Box, context: UnitContext): string {
@@ -276,9 +303,9 @@ function renderUnit(unit: DiagramUnit, box: Box, context: UnitContext): string {
     out.push(`<rect x="${num(x)}" y="${num(barY)}" width="${num(barWidth)}" height="${UNIT_PADDING.bar}" rx="1.5" fill="${theme.well}"/>`);
     out.push(`<rect x="${num(x)}" y="${num(barY)}" width="${num(barWidth * context.barShare)}" height="${UNIT_PADDING.bar}" rx="1.5" fill="${theme.ruleStrong}"/>`);
   }
-  if (unit.inCycle) out.push(`<circle cx="${num(box.x + box.width - 16)}" cy="${num(box.y)}" r="10" fill="${theme.ground}" stroke="${theme.cycle}" stroke-width="1"/>${cycleGlyph(box.x + box.width - 16, box.y + 4, theme.cycle)}`);
+  if (context.mutual) out.push(`<circle cx="${num(box.x + box.width - 16)}" cy="${num(box.y)}" r="10" fill="${theme.ground}" stroke="${theme.cycle}" stroke-width="1"/>${cycleGlyph(box.x + box.width - 16, box.y + 4, theme.cycle)}`);
   context.noteNumbers.forEach((n, index) => {
-    out.push(noteMarker(box.x + box.width - (unit.inCycle ? 42 : 14) - index * type.unitMeta * 1.6, box.y, n, theme, type.unitMeta));
+    out.push(noteMarker(box.x + box.width - (context.mutual ? 42 : 14) - index * type.unitMeta * 1.6, box.y, n, theme, type.unitMeta));
   });
   out.push(`</g>`);
   return out.join("");
@@ -294,7 +321,7 @@ function renderLegend(x: number, y: number, size: number, theme: DiagramTheme, w
   };
   item(`<rect x="{x}" y="${num(y - size * 0.8)}" width="16" height="${num(size * 0.9)}" rx="2" fill="${theme.surface}" stroke="${theme.ruleStrong}"/>`, "part of the code", 16);
   item(`<path d="M{x} {y}h22" stroke="${theme.inkMuted}" stroke-width="1.5" marker-end="url(#${markerId("plain", 1.25)})"/>`, "imports (number = file-level imports)", 26);
-  item(`<path d="M{x} {y}h22" stroke="${theme.cycle}" stroke-width="1.5"${theme.cycleDash ? ` stroke-dasharray="${theme.cycleDash}"` : ""}/>`, "import cycle", 22);
+  item(`<path d="M{x} {y}h22" stroke="${theme.cycle}" stroke-width="1.5"${theme.cycleDash ? ` stroke-dasharray="${theme.cycleDash}"` : ""}/>`, "imports each other", 22);
   item(`<rect x="{x}" y="${num(y - size * 0.8)}" width="16" height="${num(size * 0.9)}" rx="2" fill="none" stroke="${theme.rule}" stroke-dasharray="3 2"/>`, "unresolved or grouped", 16);
   if (withCaptions) item(`<text x="{x}" y="${num(y)}" class="m6 assisted" font-size="${num(size * 0.9)}">AI</text>`, "generated caption, not measured", 14);
   return out.join("");

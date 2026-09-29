@@ -4,7 +4,7 @@ import { layoutDiagram } from "@/lib/diagram/layout";
 import { buildDiagramModel } from "@/lib/diagram/model";
 import { defaultDiagramOptions } from "@/lib/diagram/options";
 import type { Box } from "@/lib/diagram/types";
-import { webApp } from "./fixtures";
+import { makeResult, many, webApp } from "./fixtures";
 
 const options = defaultDiagramOptions("document");
 const overlaps = (a: Box, b: Box) =>
@@ -53,3 +53,53 @@ test("the caption row is reserved from options alone", async () => {
   const id = model.units[0].id;
   assert.ok(withAi.units.get(id)!.height > plain.units.get(id)!.height);
 });
+
+/** A repository with groups, cross-group edges, and more than ten units. */
+function bigApp() {
+  return makeResult({
+    ...many("app", 3, ["components/f00.ts", "lib/api/f00.ts", "lib/ai/f00.ts"]),
+    ...many("components", 4, ["lib/api/f01.ts", "lib/ai/f01.ts"]),
+    ...many("lib/api", 6, ["lib/db/f00.ts", "lib/auth/f00.ts"]),
+    ...many("lib/ai", 6, ["lib/db/f01.ts", "lib/api/f02.ts"]),
+    ...many("lib/db", 5, ["lib/auth/f01.ts"]),
+    ...many("lib/auth", 5),
+    ...many("lib/cache", 4, ["lib/db/f03.ts"]),
+    ...many("lib/queue", 4, ["lib/cache/f00.ts", "lib/ai/f03.ts"]),
+    ...many("lib/log", 3),
+    ...many("jobs", 4, ["lib/db/f02.ts", "lib/ai/f02.ts", "app/f00.ts"]),
+    ...many("scripts", 3, ["jobs/f00.ts", "lib/auth/f02.ts", "lib/queue/f01.ts"]),
+  });
+}
+
+/** True when an axis-aligned segment crosses the interior of the box (shrunk by 2 px). */
+function crosses(a: { x: number; y: number }, b: { x: number; y: number }, box: Box): boolean {
+  const x0 = box.x + 2;
+  const y0 = box.y + 2;
+  const x1 = box.x + box.width - 2;
+  const y1 = box.y + box.height - 2;
+  if (Math.abs(a.x - b.x) < 0.01) return a.x > x0 && a.x < x1 && Math.max(a.y, b.y) > y0 && Math.min(a.y, b.y) < y1;
+  if (Math.abs(a.y - b.y) < 0.01) return a.y > y0 && a.y < y1 && Math.max(a.x, b.x) > x0 && Math.min(a.x, b.x) < x1;
+  // A diagonal segment should not occur; test its bounding box conservatively.
+  return Math.max(a.x, b.x) > x0 && Math.min(a.x, b.x) < x1 && Math.max(a.y, b.y) > y0 && Math.min(a.y, b.y) < y1;
+}
+
+for (const [name, build] of [["webApp", webApp], ["a larger grouped repository", bigApp]] as const) {
+  test(`no arrow passes through a box that is not its own endpoint (${name})`, async () => {
+    const model = buildDiagramModel(build(), options);
+    if (name !== "webApp") {
+      assert.ok(model.units.length >= 10, `only ${model.units.length} units`);
+      assert.ok(model.groups.length >= 1);
+    }
+    const positioned = await layoutDiagram(model, options);
+    assert.ok(positioned.edges.length > 0);
+    for (const { edge, points, curved } of positioned.edges) {
+      assert.equal(curved, false);
+      for (let i = 0; i + 1 < points.length; i += 1) {
+        for (const [id, box] of positioned.units) {
+          if (id === edge.from || id === edge.to) continue;
+          assert.ok(!crosses(points[i], points[i + 1], box), `${edge.id} passes through ${id}`);
+        }
+      }
+    }
+  });
+}

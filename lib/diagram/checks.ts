@@ -29,12 +29,32 @@ function listLabels(labels: string[]): string {
   return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
+/**
+ * Shared parts: imported by at least 3 other parts, and by at least 60% of
+ * them. Returns the number of distinct importing parts for each. One rule for
+ * the "hub" finding and for leaving fan-in arrows off the figure.
+ */
+export function sharedParts(
+  units: ReadonlyArray<Pick<DiagramUnit, "id" | "kind">>,
+  edges: ReadonlyArray<Pick<DiagramEdge, "from" | "to">>,
+): Map<string, number> {
+  const parts = units.filter((unit) => unit.kind === "folder" || unit.kind === "loose-files" || unit.kind === "file");
+  const partIds = new Set(parts.map((unit) => unit.id));
+  const shared = new Map<string, number>();
+  if (parts.length < 4) return shared;
+  const others = parts.length - 1;
+  for (const unit of parts) {
+    const importers = new Set(edges.filter((edge) => edge.to === unit.id && partIds.has(edge.from)).map((edge) => edge.from));
+    if (importers.size >= 3 && importers.size / others >= 0.6) shared.set(unit.id, importers.size);
+  }
+  return shared;
+}
+
 export function runDiagramChecks(input: ChecksInput): DiagramFinding[] {
   const findings: DiagramFinding[] = [];
   const unitById = new Map(input.units.map((unit) => [unit.id, unit]));
   const label = (id: string) => unitById.get(id)?.label ?? id;
   const parts = input.units.filter((unit) => unit.kind === "folder" || unit.kind === "loose-files" || unit.kind === "file");
-  const partIds = new Set(parts.map((unit) => unit.id));
 
   // cycle — groups of units that import each other.
   const cyclic = input.units.filter((unit) => unit.inCycle);
@@ -77,22 +97,17 @@ export function runDiagramChecks(input: ChecksInput): DiagramFinding[] {
     });
   }
 
-  // hub — imported by at least 60% of the other parts, and at least 3.
-  if (parts.length >= 4) {
-    for (const unit of parts) {
-      const importers = new Set(input.edges.filter((edge) => edge.to === unit.id && partIds.has(edge.from)).map((edge) => edge.from));
-      const others = parts.length - 1;
-      if (importers.size >= 3 && importers.size / others >= 0.6) {
-        findings.push({
-          id: `hub:${unit.id}`,
-          kind: "hub",
-          confidence: "derived",
-          subjects: [unit.id],
-          figures: { importers: importers.size, of: others },
-          text: `${unit.label} is imported by ${importers.size} of the ${others} other parts.`,
-        });
-      }
-    }
+  // hub — imported by at least 60% of the other parts, and at least 3 (see sharedParts).
+  for (const [id, importers] of sharedParts(input.units, input.edges)) {
+    const others = parts.length - 1;
+    findings.push({
+      id: `hub:${id}`,
+      kind: "hub",
+      confidence: "derived",
+      subjects: [id],
+      figures: { importers, of: others },
+      text: `${label(id)} is imported by ${importers} of the ${others} other parts.`,
+    });
   }
 
   // isolated — a non-test part with no arrows at all.

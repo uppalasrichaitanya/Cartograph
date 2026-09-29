@@ -11,8 +11,8 @@
 import type { DiagramPreset, DiagramUnit } from "./types";
 
 export const BUDGETS = {
-  document: { units: 24, files: 32, edges: 40, notes: 6 },
-  slide: { units: 16, files: 20, edges: 26, notes: 3 },
+  document: { units: 24, files: 32, edges: 28, notes: 6 },
+  slide: { units: 16, files: 20, edges: 18, notes: 3 },
 } as const satisfies Record<DiagramPreset, { units: number; files: number; edges: number; notes: number }>;
 
 export const TYPE_SCALE = {
@@ -20,12 +20,12 @@ export const TYPE_SCALE = {
   slide: { eyebrow: 13, title: 44, subtitle: 17, groupTitle: 13, unitLabel: 19, unitMeta: 15, caption: 15, edgeLabel: 14, footer: 13 },
 } as const;
 
-export const DOCUMENT_CANVAS = { minWidth: 1600, maxWidth: 2400, minHeight: 900, margin: 56 } as const;
+export const DOCUMENT_CANVAS = { minWidth: 960, maxWidth: 2400, minHeight: 0, margin: 56 } as const;
 export const SLIDE_CANVAS = { width: 1920, height: 1080, margin: 72, maxScale: 1.5, warnBelow: 0.6 } as const;
 
 export const UNIT_WIDTH = {
   document: { min: 150, max: 300 },
-  slide: { min: 180, max: 340 },
+  slide: { min: 180, max: 380 },
 } as const;
 
 const PAD_X = 16;
@@ -75,14 +75,15 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 export function unitMeta(unit: DiagramUnit): string {
   switch (unit.kind) {
     case "file":
-      return `${formatCount(unit.lines)} lines`;
+      return `${formatCount(unit.lines)} lines${unit.sharedBy ? ` · used by ${unit.sharedBy} parts` : ""}`;
     case "unresolved":
       return "targets not found";
     case "boundary":
       return plural(unit.files, "file");
     default: {
       const partial = unit.reducedConfidence > 0 ? ` · ${unit.reducedConfidence} partial` : "";
-      return `${plural(unit.files, "file")} · ${formatCount(unit.lines)} lines${partial}`;
+      const used = unit.sharedBy ? ` · used by ${unit.sharedBy} parts` : "";
+      return `${plural(unit.files, "file")} · ${formatCount(unit.lines)} lines${partial}${used}`;
     }
   }
 }

@@ -12,7 +12,7 @@ import { REGION_LIMITS } from "@/lib/analysis/clusterByFolder";
 import { buildFolderTree, isTestPath, type FolderTreeNode } from "@/lib/analysis/folderTree";
 import { collectUnresolvedImports, projectConfidenceByPath } from "@/lib/analysis/projectConfidence";
 import type { AnalysisResult, GeometryConfidence, GraphNode } from "@/types/graph";
-import { runDiagramChecks } from "./checks";
+import { runDiagramChecks, sharedParts } from "./checks";
 import { BUDGETS } from "./metrics";
 import type { DiagramEdge, DiagramGroup, DiagramModel, DiagramOptions, DiagramUnit } from "./types";
 
@@ -270,6 +270,7 @@ function finish(result: AnalysisResult, options: DiagramOptions, evidence: Diagr
     const [from, to] = key.split("\0");
     return {
       id: `e:${from}->${to}`,
+      mutual: aggregated.has(`${to}\0${from}`),
       from,
       to,
       count: entry.count,
@@ -278,12 +279,21 @@ function finish(result: AnalysisResult, options: DiagramOptions, evidence: Diagr
     };
   }).sort((a, b) => byString(a.id, b.id));
 
+  // Shared parts (imported by most others) are drawn as a count, not as a fan of arrows.
+  const shared = options.scope.kind === "repository" ? sharedParts(built.drafts, allEdges) : new Map<string, number>();
+  // A mutual pair with a shared part is set aside too: with the shared part on the right edge, its
+  // arrow back would run against the flow and loop around the figure. The cycle finding still reports it.
+  const setAside = (edge: DiagramEdge) => shared.has(edge.to) || (edge.mutual && shared.has(edge.from));
+  const sharedEdges = allEdges.filter(setAside);
+  const drawable = allEdges.filter((edge) => !setAside(edge));
+
+  // Mutual pairs always survive; the heaviest of the rest fill the budget.
   const edgeBudget = BUDGETS[options.preset].edges;
-  const cycleEdges = allEdges.filter((edge) => edge.inCycle);
-  const others = allEdges.filter((edge) => !edge.inCycle).sort((a, b) => b.count - a.count || byString(a.id, b.id));
-  const kept = [...cycleEdges, ...others.slice(0, Math.max(0, edgeBudget - cycleEdges.length))];
+  const mutualEdges = drawable.filter((edge) => edge.mutual);
+  const others = drawable.filter((edge) => !edge.mutual).sort((a, b) => b.count - a.count || byString(a.id, b.id));
+  const kept = [...mutualEdges, ...others.slice(0, Math.max(0, edgeBudget - mutualEdges.length))];
   const keptIds = new Set(kept.map((edge) => edge.id));
-  const dropped = allEdges.filter((edge) => !keptIds.has(edge.id));
+  const dropped = drawable.filter((edge) => !keptIds.has(edge.id));
 
   const units: DiagramUnit[] = built.drafts.map((draft) => ({
     id: draft.id,
@@ -297,6 +307,7 @@ function finish(result: AnalysisResult, options: DiagramOptions, evidence: Diagr
     reducedConfidence: draft.files.filter((file) => (evidence.confidence.get(file) ?? "verified") !== "verified").length,
     internalImports: internal.get(draft.id) ?? 0,
     inCycle: cyclic.has(draft.id),
+    ...(shared.has(draft.id) ? { sharedBy: shared.get(draft.id) } : {}),
     ...(draft.side ? { side: draft.side } : {}),
   })).sort((a, b) => byString(a.id, b.id));
 
@@ -335,6 +346,7 @@ function finish(result: AnalysisResult, options: DiagramOptions, evidence: Diagr
     omitted: {
       edges: dropped.length,
       edgeMaxCount: dropped.reduce((max, edge) => Math.max(max, edge.count), 0),
+      sharedEdges: sharedEdges.length,
       testFiles: built.hiddenTests,
       files: built.omittedFiles,
     },

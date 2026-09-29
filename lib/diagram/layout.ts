@@ -2,7 +2,8 @@
  * Places a diagram model with ELK's layered algorithm.
  *
  * Dependencies read left to right, containers wrap their units, and edges are
- * splines so parallel arrows do not share a trunk. Output coordinates are
+ * orthogonal polylines (the renderer rounds their corners). Shared parts sit
+ * on the right edge as the foundation. Output coordinates are
  * absolute, so the renderer never needs to know ELK's relative conventions.
  *
  * @module lib/diagram/layout
@@ -19,10 +20,13 @@ function rootOptions(): Record<string, string> {
     "elk.algorithm": "layered",
     "elk.direction": "RIGHT",
     "elk.hierarchyHandling": "INCLUDE_CHILDREN",
-    "elk.edgeRouting": "SPLINES",
+    "elk.edgeRouting": "ORTHOGONAL",
     "elk.layered.spacing.nodeNodeBetweenLayers": "72",
     "elk.spacing.nodeNode": "28",
     "elk.spacing.edgeNode": "18",
+    "elk.spacing.edgeEdge": "12",
+    "elk.layered.spacing.edgeEdgeBetweenLayers": "12",
+    "elk.layered.spacing.edgeNodeBetweenLayers": "20",
     "elk.spacing.edgeLabel": "4",
     "elk.edgeLabels.placement": "CENTER",
     "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
@@ -45,7 +49,7 @@ export async function layoutDiagram(model: DiagramModel, options: DiagramOptions
   }
   for (const unit of model.units) {
     const size = sizes.get(unit.id)!;
-    const constraint = unit.side === "in" ? "FIRST" : unit.side === "out" ? "LAST" : null;
+    const constraint = unit.side === "in" ? "FIRST" : unit.side === "out" || (unit.sharedBy && !unit.groupId) ? "LAST" : null;
     elkNodes.set(unit.id, {
       id: unit.id,
       width: size.width,
@@ -105,7 +109,7 @@ function toPositioned(model: DiagramModel, result: ElkNode, reserveCaption: bool
     positionedEdges.push({
       edge,
       points: [shift(section.startPoint), ...bends.map(shift), shift(section.endPoint)],
-      curved: bends.length > 0 && bends.length % 3 === 2,
+      curved: false, // ORTHOGONAL sections are straight segments through the bend points
       label: label && label.x !== undefined && label.y !== undefined
         ? { x: base.x + label.x, y: base.y + label.y, width: label.width ?? 0, height: label.height ?? 0 }
         : null,

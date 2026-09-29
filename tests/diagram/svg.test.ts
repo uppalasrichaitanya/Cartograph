@@ -33,8 +33,7 @@ test("the SVG is self-contained, titled, and sized", async () => {
   assert.match(svg, /<title id="t">fixture<\/title>/);
   assert.doesNotMatch(svg, /href="(?!#)/);
   assert.doesNotMatch(svg, /<image|<script|<foreignObject/);
-  assert.ok(width >= 1600 && width <= 2400);
-  assert.ok(height >= 900);
+  assert.ok(width >= 960 && width <= 2400);
 });
 
 test("slides are exactly 1920 by 1080", async () => {

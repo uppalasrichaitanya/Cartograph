@@ -47,6 +47,8 @@ export type DiagramUnit = Readonly<{
   reducedConfidence: number;
   internalImports: number;
   inCycle: boolean;
+  /** Shared units only: how many distinct other units import this one. Arrows into it are not drawn. */
+  sharedBy?: number;
   /** Boundary units only: "in" = the neighbour imports this region, "out" = this region imports it. */
   side?: "in" | "out";
 }>;
@@ -57,7 +59,10 @@ export type DiagramEdge = Readonly<{
   to: string;
   count: number;
   sampleEdgeIds: ReadonlyArray<string>;
+  /** In a strongly connected component (drives the "cycle" finding; not drawn as such). */
   inCycle: boolean;
+  /** The reverse edge (to to from) also exists: the one cycle signal drawn on the figure. */
+  mutual: boolean;
 }>;
 
 export type FindingKind = "cycle" | "test-leak" | "hub" | "isolated" | "misplaced" | "unresolved-heavy" | "oversized";
@@ -80,7 +85,7 @@ export type DiagramModel = Readonly<{
   groups: ReadonlyArray<DiagramGroup>;
   units: ReadonlyArray<DiagramUnit>;
   edges: ReadonlyArray<DiagramEdge>;
-  omitted: Readonly<{ edges: number; edgeMaxCount: number; testFiles: number; files: number }>;
+  omitted: Readonly<{ edges: number; edgeMaxCount: number; sharedEdges: number; testFiles: number; files: number }>;
   externalPackages: ReadonlyArray<Readonly<{ name: string; importingFiles: number }>>;
   findings: ReadonlyArray<DiagramFinding>;
   /** True when the analysis has no IR, so confidence and unresolved imports are unknown. */
