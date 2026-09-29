@@ -2334,4 +2334,13 @@ h1, h2, h3, p { margin-top: 0; }
   .rail-search-label, .rail-search-kbd { display: none; }
   .context-cluster { max-width: calc(100% - 1.5rem); bottom: .7rem; left: .7rem; }
 }
+
+@media (max-width: 520px) {
+  /* Four rail buttons need ~370px, so on a phone the Share button was clipped
+   * off-screen and the repo name collapsed to nothing: use a two-row rail. */
+  :root { --rail-height: 92px; }
+  .rail { flex-wrap: wrap; align-content: center; row-gap: var(--space-2); }
+  .rail-identity { flex: 1; }
+  .rail-controls { order: 1; flex-basis: 100%; gap: var(--space-1); }
+}
 .ai-result p code { padding: 0 3px; border-radius: 3px; background: var(--well); font-family: var(--type-mono); font-size: var(--text-caption); font-style: normal; }
