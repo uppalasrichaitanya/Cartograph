@@ -55,7 +55,30 @@ test("the sweep needs its secret and deletes only what is due", async () => {
     assert.equal((await sweep("Bearer wrong", "s3cret")).status, 401);
     const ok = await sweep("Bearer s3cret", "s3cret");
     assert.equal(ok.status, 200);
-    assert.deepEqual(await ok.json(), { deleted: 1 });
+    assert.deepEqual(await ok.json(), { deleted: 1, failed: 0, remaining: 0 });
     assert.equal(await store.loadAnalysis(ID), null);
   });
+});
+
+test("one failing delete does not stop the sweep", async () => {
+  const ids = [ID, OTHER, "33333333-3333-4333-8333-333333333333"];
+  const gone: string[] = [];
+  const store = {
+    listExpiredIds: async () => ids,
+    deleteAnalysis: async (id: string) => { if (id === OTHER) throw new Error("boom"); gone.push(id); },
+  } as unknown as LocalStorage;
+  const res = await handleSweep(new Request("http://test/s", { headers: { authorization: "Bearer k" } }), store, new Date(), "k");
+  assert.deepEqual(await res.json(), { deleted: 2, failed: 1, remaining: 0 });
+  assert.deepEqual(gone, [ID, ids[2]]);
+});
+
+test("a passed deadline starts no deletes and reports what remains", async () => {
+  const store = {
+    listExpiredIds: async () => [ID, OTHER],
+    deleteAnalysis: async () => { throw new Error("must not be called"); },
+  } as unknown as LocalStorage;
+  const ticks = [0, 60_000];
+  const clock = () => ticks.shift() ?? 60_000;
+  const res = await handleSweep(new Request("http://test/s", { headers: { authorization: "Bearer k" } }), store, new Date(), "k", { clock });
+  assert.deepEqual(await res.json(), { deleted: 0, failed: 0, remaining: 2 });
 });
