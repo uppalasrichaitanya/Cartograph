@@ -5,7 +5,7 @@
  * choices that shape it. The preview IS the file: the same URL the download
  * and the README embed use.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { downloadBlob, rasterizeSvg } from "@/lib/diagram/browser";
 import { defaultDiagramOptions, diagramFilename, diagramQuery } from "@/lib/diagram/options";
 import type { DiagramOptions } from "@/lib/diagram/types";
@@ -40,6 +40,9 @@ type Choice<T extends string> = Readonly<{ value: T; label: string }>;
 function Segmented<T extends string>({ label, value, choices, onChange }: {
   label: string; value: T; choices: ReadonlyArray<Choice<T>>; onChange: (value: T) => void;
 }) {
+  // useId, not the label: labels contain spaces, which aria-labelledby would
+  // read as several id references.
+  const labelId = useId();
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
     event.preventDefault();
@@ -49,8 +52,8 @@ function Segmented<T extends string>({ label, value, choices, onChange }: {
   };
   return (
     <div className="export-field">
-      <span className="export-field-label" id={`export-${label}`}>{label}</span>
-      <div className="export-segmented" role="radiogroup" aria-labelledby={`export-${label}`} onKeyDown={onKeyDown}>
+      <span className="export-field-label" id={labelId}>{label}</span>
+      <div className="export-segmented" role="radiogroup" aria-labelledby={labelId} onKeyDown={onKeyDown}>
         {choices.map((choice) => (
           <button
             key={choice.value}
@@ -131,12 +134,17 @@ export function ExportDialog({ analysisId, repoName, region, onClose }: {
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
+  // Held in a ref so a new onClose from the parent never re-runs the mount
+  // effect (which would re-add the listener and steal focus back).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
   useEffect(() => {
     dialogRef.current?.querySelector<HTMLElement>("[role=radio][aria-checked=true]")?.focus();
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); onCloseRef.current(); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   const trapFocus = (event: React.KeyboardEvent) => {
     if (event.key !== "Tab" || !dialogRef.current) return;

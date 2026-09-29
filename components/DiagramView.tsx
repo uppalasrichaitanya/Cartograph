@@ -327,6 +327,7 @@ function DiagramInner({
   const [inferenceOpen, setInferenceOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const exportButton = useRef<HTMLButtonElement>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [trail, setTrail] = useState<ReadonlyArray<TrailEntry>>([]);
 
@@ -1026,6 +1027,12 @@ function DiagramInner({
     );
   }, [reactFlowInstance]);
 
+  /* Closing the export dialog returns focus to the button that opened it. */
+  const closeExport = useCallback(() => {
+    setExportOpen(false);
+    requestAnimationFrame(() => exportButton.current?.focus());
+  }, []);
+
   /* ─── Keyboard shortcuts (Issue 15) ─── */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1041,6 +1048,10 @@ function DiagramInner({
         return;
       }
       if ((e.key === "e" || e.key === "E") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Other open UI owns the keyboard, and so do select and editable fields.
+        if (searchOpen || showConfirm || aiOpen || inferenceOpen || lensMenuOpen) return;
+        if (e.target instanceof HTMLSelectElement) return;
+        if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
         e.preventDefault();
         setExportOpen(true);
         return;
@@ -1063,7 +1074,7 @@ function DiagramInner({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [searchOpen, exportOpen, selectedFile, reactFlowInstance, closePanel]);
+  }, [searchOpen, exportOpen, showConfirm, aiOpen, inferenceOpen, lensMenuOpen, selectedFile, reactFlowInstance, closePanel]);
 
   /* ─── Lens names, for the active-lens indicator ─── */
   /**
@@ -1241,6 +1252,7 @@ function DiagramInner({
             <SparkIcon size={13} /> AI explain
           </button>
           <button
+            ref={exportButton}
             type="button"
             className="rail-button"
             onClick={() => setExportOpen(true)}
@@ -1518,7 +1530,7 @@ function DiagramInner({
           analysisId={result.id}
           repoName={result.repoMeta.repoName}
           region={folder}
-          onClose={() => setExportOpen(false)}
+          onClose={closeExport}
         />
       )}
 
