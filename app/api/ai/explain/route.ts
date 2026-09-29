@@ -9,6 +9,7 @@ import {
 import { AiUnavailableError, generateAiResponse } from "@/lib/ai/provider";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 import { getStorage } from "@/lib/storage";
+import { loadLiveAnalysis } from "@/lib/storage/live";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
   const analysisId = body.analysisId;
 
   const storage = getStorage();
-  const result = await storage.loadAnalysis(analysisId);
+  const result = await loadLiveAnalysis(storage, analysisId);
   if (!result) return NextResponse.json({ error: "Analysis not found." }, { status: 404 });
 
   let explainPrompt;

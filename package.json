@@ -10,6 +10,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
+    "test:e2e": "playwright test",
     "test": "tsx --test tests/**/*.test.ts",
     "benchmark:query": "tsx scripts/benchmark-query.ts"
   },
@@ -29,6 +30,7 @@
     "web-tree-sitter": "^0.25.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.15.3",
     "@types/react": "^19.1.2",

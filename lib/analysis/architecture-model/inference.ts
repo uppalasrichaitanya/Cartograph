@@ -32,8 +32,10 @@ function topLevel(path: string): string {
   return path.split("/")[0] ?? path;
 }
 
-function inferLayer(file: FileNode): string {
+function inferLayer(file: FileNode): string | null {
   const segments = file.path.split("/").slice(0, -1).map((segment) => segment.toLowerCase());
+  // A file at the repository root has no folder to suggest a layer.
+  if (segments.length === 0) return null;
   const candidate = [...segments].reverse().find((segment) => LAYER_WORDS.has(segment));
   return candidate ?? topLevel(file.path);
 }
@@ -87,7 +89,7 @@ export function inferArchitectureViews(
   const domainOverrides = new Set(Object.keys(overrides.domainByNodeId ?? {}));
   for (const file of files) {
     const layerName = overrides.layerByNodeId?.[file.id] ?? inferLayer(file);
-    layer.set(layerName, [...(layer.get(layerName) ?? []), file.id]);
+    if (layerName) layer.set(layerName, [...(layer.get(layerName) ?? []), file.id]);
     const domainName = overrides.domainByNodeId?.[file.id] ?? inferDomain(file);
     if (domainName) domain.set(domainName, [...(domain.get(domainName) ?? []), file.id]);
   }

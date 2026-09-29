@@ -35,3 +35,16 @@ test("explicit overrides are user-defined and take precedence", () => {
   assert.equal(group.provenance.origin, "user-defined");
   assert.ok(group.memberNodeIds.includes(target));
 });
+
+test("root-level files are not assigned a layer", () => {
+  const builder = new IRBuilder();
+  const root = builder.buildModuleRoot("", "typescript", "package.json");
+  const raws: RawExtraction[] = [
+    { path: "next.config.ts", lineCount: 1, internalImports: [], externalImports: [], parseErrors: [], capabilitiesUsed: ["imports"] },
+    { path: "lib/a.ts", lineCount: 1, internalImports: [], externalImports: [], parseErrors: [], capabilitiesUsed: ["imports"] },
+  ];
+  const files = raws.map((raw) => builder.buildFileNode(raw, root));
+  const ir = builder.finalize([root, ...files], files.map((file) => builder.buildContainmentEdge(file, root)), [root]);
+  const layers = inferArchitectureViews(ir).groups.filter((group) => group.kind === "layer");
+  assert.deepEqual(layers.map((group) => group.name), ["lib"]);
+});

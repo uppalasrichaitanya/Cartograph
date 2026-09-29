@@ -15,6 +15,8 @@ export interface BoundaryRecord {
 
 export interface ArchitectureModelData {
   readonly modelVersion: 1;
+  /** Which rule produced the region boundaries. Absent means the legacy top-level rule. */
+  readonly regionStrategy?: "adaptive-v1";
   readonly boundaries: ReadonlyArray<BoundaryRecord>;
 }
 

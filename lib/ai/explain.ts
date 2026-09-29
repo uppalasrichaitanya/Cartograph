@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isTestPath } from "@/lib/analysis/folderTree";
 import type { AnalysisResult, GraphNode } from "@/types/graph";
 import { createAiQueryContext, dropUnsupportedFigures, evidenceNumbers, validateCitation } from "./grounding";
 import { computeImpact, getNeighbors } from "./tools";
@@ -14,7 +15,7 @@ export type ExplainSubject =
   | Readonly<{ kind: "file"; id: string }>;
 
 /** Bumped whenever the prompt or evidence shape changes, so cached answers are not reused. */
-export const EXPLAIN_PROMPT_VERSION = 2;
+export const EXPLAIN_PROMPT_VERSION = 3;
 
 export const EXPLAIN_SECTIONS: Readonly<Record<ExplainSubject["kind"], ReadonlyArray<string>>> = {
   overview: ["What this project is", "How it is organized", "How the pieces connect", "Hotspots and risks"],
@@ -53,12 +54,6 @@ export type ExplainPrompt = Readonly<{
 export function explanationCacheKey(subject: ExplainSubject): string {
   const id = subject.kind === "overview" ? "" : subject.id;
   return createHash("sha256").update(`v${EXPLAIN_PROMPT_VERSION}\0${subject.kind}\0${id}`).digest("hex");
-}
-
-const TEST_PATH = /(^|\/)(tests?|__tests__|specs?|e2e)\/|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(go|py)$/i;
-
-function isTestPath(path: string): boolean {
-  return TEST_PATH.test(path);
 }
 
 function top<T>(items: Iterable<T>, limit: number, score: (item: T) => number, tieBreak: (item: T) => string): T[] {
@@ -292,7 +287,7 @@ export class ExplainSubjectError extends Error {}
 
 const SUBJECT_GUIDANCE: Readonly<Record<ExplainSubject["kind"], string>> = {
   overview: "Give a newcomer a guided tour of the whole repository: what it likely does, how its regions divide the work, how they depend on each other, and where complexity concentrates. readingOrder should be the best files to open first to understand the system.",
-  region: "Explain what this region (a top-level folder group) is responsible for, which of its files matter most, and how it connects to the rest of the codebase. readingOrder should be the files to open first to understand this region.",
+  region: "Explain what this region (a folder group) is responsible for, which of its files matter most, and how it connects to the rest of the codebase. readingOrder should be the files to open first to understand this region.",
   file: "Explain what this file is for, what it relies on, what relies on it, and what could break if it changes. readingOrder should be the files to read next to understand this file in context.",
 };
 

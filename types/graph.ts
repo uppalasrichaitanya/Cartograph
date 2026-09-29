@@ -93,6 +93,8 @@ export type RenderNodeData = {
   folder?: string;
   filePath?: string;
   fileIds?: string[];
+  /** Folder overview only, client-side: files / largest region's files, for the size bar. */
+  sizeShare?: number;
   /**
    * Unresolved stubs only: the raw specifier exactly as written in source.
    */
@@ -193,6 +195,12 @@ export type AnalysisResult = {
   parseErrors: ParseError[];
   renderData: RenderData;
   repoMeta: RepoMeta;
+  /**
+   * When this analysis stops being served. Absent on analyses made before
+   * retention existed, which never expire. `expiresAt: null` means the
+   * uploader chose to keep it until they delete it.
+   */
+  retention?: { expiresAt: string | null };
   /**
    * The validated, versioned Intermediate Representation built alongside
    * the existing DependencyGraph. Optional for two distinct reasons:

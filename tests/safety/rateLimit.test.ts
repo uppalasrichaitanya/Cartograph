@@ -49,3 +49,8 @@ test("enforceRateLimit returns a 429 with Retry-After once the global budget is 
   assert.equal(response?.headers.get("Retry-After"), "60");
   assert.match(((await response?.json()) as { error: string }).error, /lot of requests/);
 });
+
+test("diagram exports have their own budget", async () => {
+  const { RATE_LIMITS } = await import("@/lib/safety/rateLimit");
+  assert.deepEqual(RATE_LIMITS.diagram.map((rule) => [rule.name, rule.max]), [["diagram-minute", 30], ["diagram-day", 300]]);
+});

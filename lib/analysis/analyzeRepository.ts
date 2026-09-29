@@ -10,6 +10,7 @@ import { ParserRegistry } from "./parsers/registry";
 import { TypeScriptParser } from "./parsers/typescript/parser";
 import { PythonParser } from "./parsers/python/parser";
 import { GoParser } from "./parsers/go/parser";
+import { createOwnerToken, DEFAULT_RETENTION, expiresAt, hashOwnerToken, type RetentionChoice } from "@/lib/ownership";
 import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
 import { getStorage, isUsingBlobStorage, StorageError } from "@/lib/storage";
@@ -41,12 +42,13 @@ export type AnalysisOptions = {
   zipPath: string;
   repoName?: string;
   repoSizeBytes?: number;
+  retention?: RetentionChoice;
 };
 
 export async function analyzeRepository(
   optionsOrPath: string | AnalysisOptions,
   report: ProgressReporter = () => {},
-): Promise<AnalysisResult> {
+): Promise<AnalysisResult & { ownerToken: string }> {
   const options: AnalysisOptions =
     typeof optionsOrPath === "string" ? { zipPath: optionsOrPath } : optionsOrPath;
   const { zipPath, repoName = "Untitled Repository", repoSizeBytes = null } = options;
@@ -208,9 +210,11 @@ export async function analyzeRepository(
     const repoMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
 
     const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    const expiry = expiresAt(createdAt, options.retention ?? DEFAULT_RETENTION);
     const result: AnalysisResult = {
       id,
-      createdAt: new Date().toISOString(),
+      createdAt,
       shareUrl: `/repo/${id}`,
       graph,
       clusters,
@@ -218,6 +222,7 @@ export async function analyzeRepository(
       parseErrors: allParseErrors,
       renderData,
       repoMeta,
+      retention: { expiresAt: expiry },
       // Attach validated IR if construction succeeded.
       // Old analyses without this field still load fine (field is optional).
       ...(repositoryIR ? { repositoryIR } : {}),
@@ -227,7 +232,11 @@ export async function analyzeRepository(
     };
     await report("persisting", "Saving the shareable diagram");
     await storage.saveAnalysis(result);
-    return result;
+    const ownerToken = createOwnerToken();
+    await storage.saveOwner(id, { tokenHash: hashOwnerToken(ownerToken), createdAt });
+    if (expiry) await storage.markExpiry(id, expiry);
+    // The token is returned once and never persisted: the stored analysis is public.
+    return { ...result, ownerToken };
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
     // Clean up the uploaded zip/blob.

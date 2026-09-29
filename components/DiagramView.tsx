@@ -36,6 +36,7 @@ import {
   type WorkspacePosition,
 } from "@/lib/workspace/position";
 import { cameraMotion, structuralLegDuration } from "@/lib/workspace/motion";
+import { edgeStrokeWidth, regionEdgeCounts, regionSizeShare } from "@/lib/workspace/regionEdges";
 import { buildSearchItems } from "@/lib/workspace/searchItems";
 import type { SearchTarget } from "@/lib/workspace/search";
 import {
@@ -49,8 +50,11 @@ import { BreadcrumbNav } from "./BreadcrumbNav";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SearchOverlay } from "./SearchOverlay";
 import { ZoomControls } from "./ZoomControls";
-import { LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
+import { CloseIcon, DownloadIcon, LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
+import { ExportDialog } from "./ExportDialog";
 import { copyShareLink } from "@/lib/workspace/share";
+import { forgetOwnerToken, loadOwnerToken, saveOwnerToken, takeOwnerFragment } from "@/lib/workspace/ownerToken";
+import { OwnerNotice } from "./OwnerNotice";
 
 /* ─── Types ─── */
 type FlowNode = Node<RenderNodeData, "architecture">;
@@ -127,6 +131,11 @@ function ArchitectureNode({ data }: NodeProps<FlowNode>) {
           {data.isBoundary ? " · collapsed" : ""}
         </span>
       )}
+      {data.kind === "folder" && !data.isBoundary && data.sizeShare !== undefined && (
+        <span className="node-size-bar" aria-hidden="true">
+          <span style={{ width: `${Math.round(data.sizeShare * 100)}%` }} />
+        </span>
+      )}
       {data.kind === "file" && <span>{data.filePath}</span>}
       {marker && <em className="confidence-marker">{marker}</em>}
       {data.reducedConfidenceCount ? (
@@ -200,24 +209,42 @@ function centeredWithInspector(nodeX: number, zoom: number, isOpen: boolean): nu
 }
 
 /* ─── Helpers ─── */
-function graphToFlow(graph: RenderGraph): { nodes: FlowNode[]; edges: Edge[] } {
+function graphToFlow(
+  graph: RenderGraph,
+  counts: ReadonlyMap<string, number> | null,
+): { nodes: FlowNode[]; edges: Edge[] } {
+  const maxFiles = Math.max(0, ...graph.nodes.map((node) => node.data.fileIds?.length ?? 0));
   return {
-    nodes: graph.nodes.map((node) => ({ ...node, type: "architecture" })),
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      type: "architecture",
+      data: counts && node.data.kind === "folder"
+        ? { ...node.data, sizeShare: regionSizeShare(node.data.fileIds?.length ?? 0, maxFiles) }
+        : node.data,
+    })),
     edges: graph.edges.map((edge) => {
       const confidence = edge.confidence ?? "derived";
+      const count = counts?.get(edge.id);
+      const baseWidth = count ? edgeStrokeWidth(count) : 1.4;
       return {
         ...edge,
-        type: "smoothstep",
+        // Region arrows are few and weighted; bezier curves keep parallel
+        // arrows apart instead of sharing one orthogonal trunk.
+        type: counts ? "default" : "smoothstep",
         // An arrowhead asserts arrival at a known target. An unresolved
         // import has no known target, so it gets none.
         ...(confidence === "unknown"
           ? {}
-          : { markerEnd: { type: "arrowclosed" as const } }),
+          : {
+              markerEnd: counts
+                ? { type: "arrowclosed" as const, markerUnits: "userSpaceOnUse", width: 14, height: 14 }
+                : { type: "arrowclosed" as const },
+            }),
         className: `confidence-${confidence}`,
         // Kept in data so the highlight effect can recompute styling from
         // confidence instead of overwriting it.
-        data: { confidence },
-        style: { strokeWidth: 1.4, opacity: edgeRestOpacity(confidence) },
+        data: { confidence, count, baseWidth },
+        style: { strokeWidth: baseWidth, opacity: edgeRestOpacity(confidence) },
       };
     }),
   };
@@ -238,9 +265,11 @@ function getConnectedIds(nodeId: string, edges: Edge[]): Set<string> {
 function DiagramInner({
   result,
   initialSearch,
+  aiConfigured,
 }: {
   result: AnalysisResult;
   initialSearch: string;
+  aiConfigured: boolean;
 }) {
   const router = useRouter();
   const graphQuery = useMemo(() => createGraphQuery(result.graph), [result.graph]);
@@ -301,8 +330,94 @@ function DiagramInner({
   const [lensMenuOpen, setLensMenuOpen] = useState(false);
   const [inferenceOpen, setInferenceOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportButton = useRef<HTMLButtonElement>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [trail, setTrail] = useState<ReadonlyArray<TrailEntry>>([]);
+  const [ownerToken, setOwnerToken] = useState<string | null>(null);
+  const [newUpload, setNewUpload] = useState<string | null>(null); // expiresAt or "manual"
+  const [moreOpen, setMoreOpen] = useState(false);
+  // The rail clips its overflow, so the menu is placed against the viewport.
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Browser-only state is read after mount so server and client render the
+    // same markup; the setters run in a microtask, not the effect body.
+    // An owner link from another device: store the token, then strip it from the address bar.
+    const fromFragment = takeOwnerFragment(window.location.hash);
+    if (fromFragment) saveOwnerToken(result.id, fromFragment);
+    // A malformed owner fragment is stripped too; it must not linger in the address bar.
+    if (fromFragment || /(^|[#&])owner=/.test(window.location.hash)) {
+      history.replaceState(history.state, "", window.location.pathname + window.location.search);
+    }
+    let marker: string | null = null;
+    try { marker = window.sessionStorage.getItem(`cartograph:new:${result.id}`); } catch { /* unavailable */ }
+    const token = loadOwnerToken(result.id);
+    queueMicrotask(() => {
+      setOwnerToken(token);
+      if (marker) setNewUpload(marker);
+    });
+  }, [result.id]);
+
+  const deleting = useRef(false);
+  const deleteAnalysis = useCallback(async () => {
+    if (!ownerToken || deleting.current) return;
+    deleting.current = true;
+    setDeleteError(null);
+    try {
+      const response = await fetch(`/api/analysis/${result.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${ownerToken}` } });
+      if (response.status === 204) {
+        forgetOwnerToken(result.id);
+        router.push("/?deleted=1");
+        return;
+      }
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      setDeleteError(body.error ?? "The analysis could not be deleted.");
+    } catch {
+      setDeleteError("Could not reach Cartograph. Try again.");
+    }
+    deleting.current = false;
+    setConfirmDelete(false);
+  }, [ownerToken, result.id, router]);
+
+  /* A delete error goes away by itself after a few seconds. */
+  useEffect(() => {
+    if (!deleteError) return;
+    const timer = window.setTimeout(() => setDeleteError(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [deleteError]);
+
+  const moreButton = useRef<HTMLButtonElement>(null);
+
+  /* The "···" menu closes on Escape or a click elsewhere. */
+  useEffect(() => {
+    if (!moreOpen) return;
+    document.querySelector<HTMLElement>(".rail-menu [role=menuitem]")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Captured and stopped so the global Escape handler does not also close search or panels.
+      e.stopPropagation();
+      e.preventDefault();
+      setMoreOpen(false);
+      moreButton.current?.focus();
+    };
+    const close = () => setMoreOpen(false);
+    const onPointer = (e: PointerEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(".rail-more")) setMoreOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [moreOpen]);
 
   const canvas = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useReactFlow();
@@ -394,7 +509,12 @@ function DiagramInner({
   );
 
   const renderGraph = folder ? result.renderData.fileViewByFolder[folder] : result.renderData.folderView;
-  const initial = useMemo(() => graphToFlow(renderGraph), [renderGraph]);
+  const regionCounts = useMemo(() => regionEdgeCounts(result.graph), [result.graph]);
+  const initial = useMemo(
+    () => graphToFlow(renderGraph, folder ? null : regionCounts),
+    [renderGraph, folder, regionCounts],
+  );
+  const rootFiles = result.graph.nodes.filter((node) => !node.path.includes("/")).length;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
 
@@ -787,7 +907,9 @@ function DiagramInner({
         // interaction — a highlighted heuristic edge stays visibly heuristic.
         const confidence = (edge.data?.confidence ?? "derived") as GeometryConfidence;
         const restOpacity = edgeRestOpacity(confidence);
-        const strokeWidth = isHighlighted ? 2.5 : 1.4;
+        const baseWidth = (edge.data?.baseWidth as number | undefined) ?? 1.4;
+        const strokeWidth = isHighlighted ? Math.max(2.5, baseWidth + 0.75) : baseWidth;
+        const count = edge.data?.count as number | undefined;
         // Receded, not removed — matching the node rule. The former 0.12
         // made an edge effectively invisible.
         const dimFactor = activeIds || subjectId ? (isHighlighted ? 1 : 0.35) : 1;
@@ -799,6 +921,13 @@ function DiagramInner({
 
         return {
           ...edge,
+          // Counts show only on arrows attached to what the reader is looking
+          // at; labelling every arrow at once is noise.
+          label: isHighlighted && count ? `${count}` : undefined,
+          labelBgPadding: [4, 2] as [number, number],
+          labelBgBorderRadius: 3,
+          labelBgStyle: { fill: "var(--paper)" },
+          labelStyle: { fill: "var(--ink-muted)", fontFamily: "var(--type-mono)", fontSize: 11 },
           style: {
             ...edge.style,
             strokeWidth,
@@ -986,15 +1115,33 @@ function DiagramInner({
     );
   }, [reactFlowInstance]);
 
+  /* Closing the export dialog returns focus to the button that opened it. */
+  const closeExport = useCallback(() => {
+    setExportOpen(false);
+    requestAnimationFrame(() => exportButton.current?.focus());
+  }, []);
+
   /* ─── Keyboard shortcuts (Issue 15) ─── */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't handle when typing in inputs.
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+      // The export dialog owns the keyboard while it is open.
+      if (exportOpen) return;
+
       if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "f")) {
         e.preventDefault();
         setSearchOpen(true);
+        return;
+      }
+      if ((e.key === "e" || e.key === "E") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Other open UI owns the keyboard, and so do select and editable fields.
+        if (searchOpen || showConfirm || confirmDelete || moreOpen || aiOpen || inferenceOpen || lensMenuOpen) return;
+        if (e.target instanceof HTMLSelectElement) return;
+        if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
+        e.preventDefault();
+        setExportOpen(true);
         return;
       }
       if (e.key === "Escape") {
@@ -1015,7 +1162,7 @@ function DiagramInner({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [searchOpen, selectedFile, reactFlowInstance, closePanel]);
+  }, [searchOpen, exportOpen, showConfirm, confirmDelete, moreOpen, aiOpen, inferenceOpen, lensMenuOpen, selectedFile, reactFlowInstance, closePanel]);
 
   /* ─── Lens names, for the active-lens indicator ─── */
   /**
@@ -1193,6 +1340,16 @@ function DiagramInner({
             <SparkIcon size={13} /> AI explain
           </button>
           <button
+            ref={exportButton}
+            type="button"
+            className="rail-button"
+            onClick={() => setExportOpen(true)}
+            aria-haspopup="dialog"
+            aria-keyshortcuts="E"
+          >
+            <DownloadIcon size={13} /> Export
+          </button>
+          <button
             type="button"
             className="rail-button"
             // Writes the current position first, then copies. The address is
@@ -1207,6 +1364,23 @@ function DiagramInner({
             <LinkIcon size={13} />
             {shareStatus === "copied" ? "Link copied" : shareStatus === "failed" ? "Copy failed" : "Share"}
           </button>
+          {ownerToken && (
+            <div className="rail-more">
+              <button ref={moreButton} type="button" className="rail-button" aria-haspopup="menu" aria-expanded={moreOpen} aria-label="More actions" onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                setMenuPos({ top: box.bottom + 4, right: window.innerWidth - box.right });
+                setDeleteError(null);
+                setMoreOpen((open) => !open);
+              }}>···</button>
+              {moreOpen && (
+                <div className="rail-menu" role="menu" style={menuPos ?? undefined}>
+                  <button type="button" role="menuitem" className="rail-menu-danger" onClick={() => { setMoreOpen(false); setConfirmDelete(true); }}>
+                    Delete analysis…
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -1408,7 +1582,14 @@ function DiagramInner({
               <span className="inference-group-count">{group.memberNodeIds.length} files</span>
             </div>
           ))}
-          {result.architectureInferences.groups.length === 0 && <p className="lens-item-empty">No inferred groups.</p>}
+          {rootFiles > 0 && (
+            <div className="inference-group">
+              <span className="inference-group-kind">root</span>
+              <span className="inference-group-name">Root files</span>
+              <span className="inference-group-count">{rootFiles} files</span>
+            </div>
+          )}
+          {result.architectureInferences.groups.length === 0 && rootFiles === 0 && <p className="lens-item-empty">No inferred groups.</p>}
         </div>
       )}
 
@@ -1449,6 +1630,44 @@ function DiagramInner({
         />
       )}
 
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete this analysis?"
+          message="The map, its share link, and its cached AI explanations will be removed for everyone. This cannot be undone."
+          confirmLabel="Delete"
+          cancelLabel="Keep it"
+          onConfirm={deleteAnalysis}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+      {deleteError && (
+        <p className="rail-error" role="alert">
+          {deleteError}
+          <button type="button" className="icon-button" aria-label="Dismiss error" onClick={() => setDeleteError(null)}><CloseIcon size={12} /></button>
+        </p>
+      )}
+      {newUpload && ownerToken && (
+        <OwnerNotice
+          analysisId={result.id}
+          expiresAt={newUpload === "manual" ? null : newUpload}
+          ownerToken={ownerToken}
+          onDismiss={() => {
+            setNewUpload(null);
+            try { window.sessionStorage.removeItem(`cartograph:new:${result.id}`); } catch { /* unavailable */ }
+          }}
+        />
+      )}
+
+      {exportOpen && (
+        <ExportDialog
+          analysisId={result.id}
+          repoName={result.repoMeta.repoName}
+          region={folder}
+          aiConfigured={aiConfigured}
+          onClose={closeExport}
+        />
+      )}
+
       {searchOpen && (
         <SearchOverlay
           items={searchItems}
@@ -1467,13 +1686,15 @@ function DiagramInner({
 export function DiagramView({
   result,
   initialSearch = "",
+  aiConfigured = false,
 }: {
   result: AnalysisResult;
   initialSearch?: string;
+  aiConfigured?: boolean;
 }) {
   return (
     <ReactFlowProvider>
-      <DiagramInner result={result} initialSearch={initialSearch} />
+      <DiagramInner result={result} initialSearch={initialSearch} aiConfigured={aiConfigured} />
     </ReactFlowProvider>
   );
 }

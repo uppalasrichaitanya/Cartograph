@@ -321,7 +321,7 @@ test("Phase 8 — the glyph set is one coherent system", () => {
 
   for (const component of [
     "MarkIcon", "SearchIcon", "FitIcon",
-    "ZoomInIcon", "ZoomOutIcon", "CloseIcon",
+    "ZoomInIcon", "ZoomOutIcon", "CloseIcon", "DownloadIcon",
   ]) {
     assert.ok(ICONS.includes(`export function ${component}`), `${component} should exist`);
   }
@@ -474,4 +474,14 @@ test("Phase 8 — generated reasoning stays unmistakable", () => {
   assert.ok(body);
   assert.match(body!, /font-style:\s*italic/);
   assert.match(body!, /serif/);
+});
+
+test("landing copy names every supported language", () => {
+  assert.match(PAGE, /Python · Go/);
+  const upload = read("components", "UploadForm.tsx");
+  assert.match(upload, /Python &amp; Go/);
+});
+
+test("specimen annotations sit on a paper halo", () => {
+  assert.match(CSS, /\.spec-note\s*{[^}]*paint-order:\s*stroke/);
 });

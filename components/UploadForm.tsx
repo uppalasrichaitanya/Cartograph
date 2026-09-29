@@ -5,25 +5,27 @@ import { upload } from "@vercel/blob/client";
 import { buildUploadPathname } from "@/lib/storage/uploadPathname";
 import { ProgressStream, type ProgressState } from "./ProgressStream";
 import { LoadingSkeleton } from "./LoadingSkeleton";
+import { saveOwnerToken } from "@/lib/workspace/ownerToken";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 type StreamMessage =
   | { type: "progress"; phase: string; detail: string }
-  | { type: "result"; shareUrl: string }
+  | { type: "result"; shareUrl: string; ownerToken: string; expiresAt: string | null }
   | { type: "error"; error: string };
 
 async function consumeAnalysisStream(
   zipPath: string,
   repoName: string,
   repoSizeBytes: number,
+  retention: "7d" | "30d" | "manual",
   onProgress: (progress: ProgressState) => void,
   signal: AbortSignal,
-): Promise<string> {
+): Promise<Extract<StreamMessage, { type: "result" }>> {
   const response = await fetch("/api/analyze/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ zipPath, repoName, repoSizeBytes }),
+    body: JSON.stringify({ zipPath, repoName, repoSizeBytes, retention }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -44,7 +46,7 @@ async function consumeAnalysisStream(
       if (!line) continue;
       const message = JSON.parse(line.slice(6)) as StreamMessage;
       if (message.type === "progress") onProgress({ phase: message.phase, detail: message.detail });
-      if (message.type === "result") return message.shareUrl;
+      if (message.type === "result") return message;
       if (message.type === "error") throw new Error(message.error);
     }
     if (done) break;
@@ -61,6 +63,7 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
+  const [retention, setRetention] = useState<"7d" | "30d" | "manual">("30d");
 
   const resetState = useCallback(() => {
     setIsWorking(false);
@@ -82,7 +85,7 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
     const file = input.current?.files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".zip")) {
-      setError("Choose a .zip archive of a JavaScript, TypeScript, or Python project.");
+      setError("Choose a .zip archive of a JavaScript, TypeScript, Python, or Go project.");
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
@@ -137,8 +140,12 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
       const repoName = file.name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim() || "Untitled Repository";
       const repoSizeBytes = file.size;
 
-      const shareUrl = await consumeAnalysisStream(zipRef, repoName, repoSizeBytes, setProgress, controller.signal);
-      window.location.assign(shareUrl);
+      const outcome = await consumeAnalysisStream(zipRef, repoName, repoSizeBytes, retention, setProgress, controller.signal);
+      const id = outcome.shareUrl.split("/").pop() ?? "";
+      saveOwnerToken(id, outcome.ownerToken);
+      // One-time notice on arrival: see OwnerNotice.
+      try { window.sessionStorage.setItem(`cartograph:new:${id}`, outcome.expiresAt ?? "manual"); } catch { /* unavailable */ }
+      window.location.assign(outcome.shareUrl);
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") {
         // User cancelled — silent reset.
@@ -186,7 +193,7 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
           />
           <span className="file-icon" aria-hidden="true">{selectedFileName ? "📁" : "↑"}</span>
           <span>{selectedFileName ?? "Drop a project zip here, or choose a file"}</span>
-          <small>JavaScript, TypeScript &amp; Python · 25 MB max</small>
+          <small>JavaScript, TypeScript, Python &amp; Go · 25 MB max</small>
         </label>
 
         {/* Buttons row: Submit + Cancel (Issue 29) */}
@@ -200,6 +207,16 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
             </button>
           )}
         </div>
+
+        <fieldset className="retention" disabled={isWorking}>
+          <legend>Keep this map</legend>
+          {([["30d", "30 days"], ["7d", "7 days"], ["manual", "Until I delete it"]] as const).map(([value, label]) => (
+            <label key={value}>
+              <input type="radio" name="retention" value={value} checked={retention === value} onChange={() => setRetention(value)} />
+              {label}
+            </label>
+          ))}
+        </fieldset>
 
         {/* Progress stepper (Issue 9) */}
         <ProgressStream progress={progress} />
@@ -218,7 +235,7 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
               <summary>Troubleshooting</summary>
               <ul>
                 <li>The file must be a <strong>.zip</strong> archive</li>
-                <li>It should contain JavaScript (.js/.jsx), TypeScript (.ts/.tsx), or Python (.py) source files</li>
+                <li>It should contain JavaScript (.js/.jsx), TypeScript (.ts/.tsx), Python (.py), or Go (.go) source files</li>
                 <li>Maximum file size is 25 MB</li>
                 <li>Ensure the zip doesn&apos;t contain only <code>node_modules</code> or <code>dist</code> folders</li>
                 <li>Try zipping the project root directory directly</li>

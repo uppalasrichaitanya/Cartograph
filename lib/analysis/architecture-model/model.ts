@@ -133,7 +133,7 @@ export function buildArchitectureModel(ir: RepositoryIR): ArchitectureModelData 
       || a.path.localeCompare(b.path)
       || a.id.localeCompare(b.id);
   });
-  return validateArchitectureModel({ modelVersion: 1, boundaries }, ir);
+  return validateArchitectureModel({ modelVersion: 1, regionStrategy: "adaptive-v1", boundaries }, ir);
 }
 
 export class ArchitectureModel implements ArchitectureModelQuery {

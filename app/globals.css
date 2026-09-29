@@ -466,6 +466,9 @@ h1, h2, h3, p { margin-top: 0; }
 .button-primary:hover:not(:disabled) { background: var(--focus-deep); }
 .button-secondary { color: var(--ink-muted); background: var(--surface); border: 1px solid var(--rule); }
 .button-secondary:hover:not(:disabled) { border-color: var(--rule-strong); color: var(--ink); }
+.retention { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: var(--space-3) 0 0; padding: 0; border: 0; color: var(--ink-muted); font-size: var(--text-small); }
+.retention legend { float: left; margin-right: var(--space-2); color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); letter-spacing: .08em; text-transform: uppercase; }
+.retention label { display: inline-flex; gap: var(--space-1); align-items: center; }
 .upload-actions { display: flex; gap: var(--space-2); }
 .upload-actions .button { flex: 1; }
 .privacy-note {
@@ -545,7 +548,16 @@ h1, h2, h3, p { margin-top: 0; }
 /* Margin annotations — the surveyor's hand, added after the plate was
  * pressed. Rust, because a correction is overprinted in the same ink the
  * product marks attention with. */
-.spec-note { fill: var(--focus-deep); font-family: var(--type-mono); font-size: 9.5px; }
+.spec-note {
+  fill: var(--focus-deep);
+  font-family: var(--type-mono);
+  font-size: 9.5px;
+  /* A paper halo, so registration marks under the note never cross its letters. */
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
 
 /* The legend. Four rows, keyed to the drawing above. */
 .specimen-legend {
@@ -1278,6 +1290,9 @@ h1, h2, h3, p { margin-top: 0; }
  * updating that model the result is a card slightly taller than its neighbours
  * — visible, correctable, and still a card containing its own text. */
 .architecture-node { width: 100%; min-height: 100%; padding: var(--space-3); color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-control); box-shadow: var(--shadow-flat); }
+/* Quantitative ink: how many files this region holds, relative to the largest. */
+.node-size-bar { display: block; height: 3px; margin-top: var(--space-2); background: var(--well); border-radius: 2px; overflow: hidden; }
+.node-size-bar > span { display: block; height: 100%; background: var(--rule-strong); }
 /* ─── Focus Contract ───────────────────────────────────────────────────
  *
  * One visual language, three persistence levels:
@@ -1631,7 +1646,7 @@ h1, h2, h3, p { margin-top: 0; }
 .inference-popover { max-width: 360px; }
 .inference-disclaimer { margin: 0 0 var(--space-3); color: var(--ink-faint); font-size: var(--text-micro); line-height: 1.45; }
 .inference-group { display: grid; grid-template-columns: 72px 1fr auto; gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0; border-top: 1px dashed var(--line); }
-.inference-group-kind { color: var(--assisted); font-family: var(--type-mono); font-size: var(--text-micro); text-transform: uppercase; }
+.inference-group-kind, .export-ai-tag { color: var(--assisted); font-family: var(--type-mono); font-size: var(--text-micro); text-transform: uppercase; }
 .inference-group-name { color: var(--ink); font-weight: 500; }
 .inference-group-count { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
 
@@ -2002,6 +2017,54 @@ h1, h2, h3, p { margin-top: 0; }
 .confirm-dialog .button-danger { color: var(--surface); background: var(--danger); border: 0; }
 .confirm-dialog .button-danger:hover { background: #7A1A1A; }
 
+/* ─── Export Dialog ───────────────────────────────────────────────────
+ *
+ * The preview is the exported file itself, laid on the table like a plate
+ * under review; the controls sit in the margin beside it. */
+.export-dialog {
+  width: min(1120px, calc(100vw - var(--space-6)));
+  max-height: calc(100vh - var(--space-6));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-over);
+  animation: dialogScaleIn var(--motion-connective) var(--motion-ease) forwards;
+}
+.export-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--rule); }
+.export-head h2 { margin: 0; font-size: var(--text-title); letter-spacing: var(--track-title); }
+.export-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--space-5); padding: var(--space-5); overflow: auto; }
+.export-preview { margin: 0; display: grid; gap: var(--space-2); align-content: start; }
+.export-preview img { width: 100%; height: auto; border: 1px solid var(--rule); border-radius: var(--radius-control); background: var(--paper); transition: opacity var(--motion-connective) var(--motion-ease); }
+.export-preview.is-loading img { opacity: .55; }
+.export-preview-empty { display: grid; place-items: center; min-height: 320px; color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-caption); border: 1px dashed var(--rule); border-radius: var(--radius-control); }
+.export-warning { color: var(--amber); font-size: var(--text-small); }
+.export-error { color: var(--danger); font-size: var(--text-small); }
+.export-main { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
+.export-review { display: grid; gap: var(--space-2); justify-items: start; }
+.export-hint { margin: 0; color: var(--ink-faint); font-size: var(--text-small); }
+.export-review-body { width: 100%; margin-top: 0; }
+.export-review-summary { margin: 0 0 var(--space-2); color: var(--ink); font-size: var(--text-small); line-height: 1.5; }
+.export-review-notes { margin: 0; padding-left: var(--space-5); display: grid; gap: var(--space-2); color: var(--ink); font-size: var(--text-small); line-height: 1.5; }
+.export-review-subjects { display: block; color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); }
+.export-review-disclaimer { margin: var(--space-2) 0 0; color: var(--ink-faint); font-size: var(--text-caption); }
+.export-controls { display: grid; gap: var(--space-4); align-content: start; }
+.export-field { display: grid; gap: var(--space-1); }
+.export-field-label { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); letter-spacing: .08em; text-transform: uppercase; }
+.export-segmented { display: flex; flex-wrap: wrap; border: 1px solid var(--rule-strong); border-radius: var(--radius-control); overflow: hidden; }
+.export-segmented button { flex: 1; min-height: 32px; padding: 0 var(--space-3); border: 0; border-right: 1px solid var(--rule); background: var(--surface); color: var(--ink-muted); font-size: var(--text-small); cursor: pointer; }
+.export-segmented button:last-child { border-right: 0; }
+.export-segmented button.is-on { background: var(--focus-wash); color: var(--focus-deep); font-weight: 600; }
+.export-segmented button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.export-check { display: flex; gap: var(--space-2); align-items: center; color: var(--ink-muted); font-size: var(--text-small); }
+.export-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; justify-content: flex-end; padding: var(--space-4) var(--space-5); border-top: 1px solid var(--rule); }
+.export-status { margin-right: auto; color: var(--forest); font-size: var(--text-small); }
+@media (max-width: 768px) {
+  .export-body { grid-template-columns: 1fr; }
+  .export-controls { order: -1; }
+}
+
 /* ─── Search Overlay ───────────────────────────────────────────────────
  *
  * The gazetteer. A chart's index of place names, opened over the drawing:
@@ -2322,4 +2385,25 @@ h1, h2, h3, p { margin-top: 0; }
   .rail-search-label, .rail-search-kbd { display: none; }
   .context-cluster { max-width: calc(100% - 1.5rem); bottom: .7rem; left: .7rem; }
 }
+
+@media (max-width: 520px) {
+  /* Four rail buttons need ~370px, so on a phone the Share button was clipped
+   * off-screen and the repo name collapsed to nothing: use a two-row rail. */
+  :root { --rail-height: 92px; }
+  .rail { flex-wrap: wrap; align-content: center; row-gap: var(--space-2); }
+  .rail-identity { flex: 1; }
+  .rail-controls { order: 1; flex-basis: 100%; gap: var(--space-1); }
+}
 .ai-result p code { padding: 0 3px; border-radius: 3px; background: var(--well); font-family: var(--type-mono); font-size: var(--text-caption); font-style: normal; }
+
+/* Delete menu, owner notice, and the deleted notice */
+.rail-more { position: relative; }
+.rail-menu { position: fixed; z-index: 30; min-width: 180px; padding: var(--space-1); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-control); box-shadow: var(--shadow-raised); }
+.rail-menu button { width: 100%; padding: var(--space-2) var(--space-3); border: 0; background: none; text-align: left; font-size: var(--text-small); cursor: pointer; border-radius: var(--radius-control); }
+.rail-menu-danger { color: var(--danger); }
+.rail-menu-danger:hover { background: var(--danger-wash); }
+.rail-error { display: flex; gap: var(--space-2); align-items: center; position: fixed; top: calc(var(--rail-height) + var(--space-3)); right: var(--space-4); z-index: 40; margin: 0; padding: var(--space-2) var(--space-3); color: var(--danger); background: var(--danger-wash); border-radius: var(--radius-control); font-size: var(--text-small); }
+.owner-notice { position: fixed; left: 50%; top: calc(var(--rail-height) + var(--space-3)); z-index: 35; transform: translateX(-50%); display: flex; gap: var(--space-3); align-items: center; max-width: min(720px, calc(100vw - var(--space-6))); padding: var(--space-3) var(--space-4); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-plate); box-shadow: var(--shadow-raised); font-size: var(--text-small); color: var(--ink-muted); }
+.owner-notice p { margin: 0; }
+.home-notice { margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3); color: var(--forest); background: var(--forest-wash); border-radius: var(--radius-control); font-size: var(--text-small); }
+@media (max-width: 520px) { .owner-notice { flex-wrap: wrap; } }
