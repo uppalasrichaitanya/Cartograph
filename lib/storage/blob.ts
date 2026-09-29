@@ -1,7 +1,22 @@
-import { put, del, head } from "@vercel/blob";
+import { put, del, head, list } from "@vercel/blob";
 import type { AnalysisResult } from "@/types/graph";
-import type { StorageBackend } from "./interface";
-import { StorageError, isValidExplanationRef } from "./interface";
+import type { OwnerRecord, StorageBackend } from "./interface";
+import { StorageError, isValidAnalysisId, isValidExplanationRef } from "./interface";
+
+/*
+ * Vercel Blob API notes (@vercel/blob 2.8.0, checked against its typings and source):
+ * - `del` accepts blob URLs or pathnames, singly or as an array, so deletion
+ *   can work from pathnames alone.
+ * - `list({ prefix, cursor, limit })` returns `{ blobs, cursor, hasMore }`;
+ *   `cursor` is only meaningful while `hasMore` is true.
+ * - `put` rejects a falsy body ("body is required"), so an empty string is not
+ *   allowed. Marker blobs therefore carry a single byte, "1".
+ * - `put` will not overwrite an existing pathname unless `allowOverwrite` is set.
+ * - Deleting a blob does not purge edge or browser caches, and
+ *   `cacheControlMaxAge` defaults to one month (minimum one minute), so a
+ *   deleted analysis could keep being served from the CDN. Analyses are saved
+ *   with a one hour max age so a deletion takes effect within the hour.
+ */
 
 /**
  * Fetches a public blob's JSON by pathname.
@@ -36,6 +51,8 @@ export class BlobStorage implements StorageBackend {
         access: "public",
         contentType: "application/json",
         addRandomSuffix: false,
+        // A deleted analysis stops being served by the CDN within the hour.
+        cacheControlMaxAge: 3600,
       });
     } catch (error) {
       throw new StorageError(
@@ -76,5 +93,61 @@ export class BlobStorage implements StorageBackend {
     } catch {
       // A cache write failing must never fail the request that produced it.
     }
+  }
+
+  async saveOwner(id: string, record: OwnerRecord): Promise<void> {
+    if (!isValidAnalysisId(id)) return;
+    await put(`owners/${id}.json`, JSON.stringify(record), {
+      access: "public",
+      contentType: "application/json",
+      addRandomSuffix: false,
+      cacheControlMaxAge: 60,
+    });
+  }
+
+  async loadOwner(id: string): Promise<OwnerRecord | null> {
+    if (!isValidAnalysisId(id)) return null;
+    return (await readJson(`owners/${id}.json`)) as OwnerRecord | null;
+  }
+
+  async markExpiry(id: string, expiresAt: string): Promise<void> {
+    if (!isValidAnalysisId(id)) return;
+    try {
+      // put() rejects an empty body, so the marker holds one byte.
+      await put(`expiry/${expiresAt.slice(0, 10)}/${id}`, "1", { access: "public", addRandomSuffix: false });
+    } catch {
+      // The load-time check still enforces expiry; the marker only helps the sweep.
+    }
+  }
+
+  async listExpiredIds(now: Date): Promise<string[]> {
+    const today = now.toISOString().slice(0, 10);
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await list({ prefix: "expiry/", cursor, limit: 1000 });
+      for (const blob of page.blobs) {
+        const [, day, id] = blob.pathname.split("/");
+        if (day && id && day <= today && isValidAnalysisId(id)) ids.push(id);
+      }
+      cursor = page.hasMore ? page.cursor : undefined;
+    } while (cursor);
+    return ids.sort();
+  }
+
+  async deleteAnalysis(id: string): Promise<void> {
+    if (!isValidAnalysisId(id)) return;
+    const pathnames = [`analyses/${id}.json`, `owners/${id}.json`];
+    for (const prefix of [`explanations/${id}/`, "expiry/"]) {
+      let cursor: string | undefined;
+      do {
+        const page = await list({ prefix, cursor, limit: 1000 });
+        for (const blob of page.blobs) {
+          if (prefix !== "expiry/" || blob.pathname.endsWith(`/${id}`)) pathnames.push(blob.pathname);
+        }
+        cursor = page.hasMore ? page.cursor : undefined;
+      } while (cursor);
+    }
+    await del(pathnames);
   }
 }

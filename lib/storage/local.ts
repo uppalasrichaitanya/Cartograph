@@ -1,8 +1,8 @@
-import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { AnalysisResult } from "@/types/graph";
-import type { StorageBackend } from "./interface";
-import { StorageError, isValidExplanationRef } from "./interface";
+import type { OwnerRecord, StorageBackend } from "./interface";
+import { StorageError, isValidAnalysisId, isValidExplanationRef } from "./interface";
 
 export { StorageError };
 export { MAX_UPLOAD_BYTES } from "./interface";
@@ -67,6 +67,63 @@ export class LocalStorage implements StorageBackend {
     } catch {
       // A cache write failing must never fail the request that produced it.
     }
+  }
+
+  /** Sibling folders (owners, expiry, explanations) live beside the analyses folder. */
+  private sibling(...parts: string[]): string {
+    return path.join(path.dirname(this.dataDir), ...parts);
+  }
+
+  async saveOwner(id: string, record: OwnerRecord): Promise<void> {
+    if (!isValidAnalysisId(id)) return;
+    await mkdir(this.sibling("owners"), { recursive: true });
+    await writeFile(this.sibling("owners", `${id}.json`), JSON.stringify(record), "utf8");
+  }
+
+  async loadOwner(id: string): Promise<OwnerRecord | null> {
+    if (!isValidAnalysisId(id)) return null;
+    try {
+      return JSON.parse(await readFile(this.sibling("owners", `${id}.json`), "utf8")) as OwnerRecord;
+    } catch {
+      return null;
+    }
+  }
+
+  async markExpiry(id: string, expiresAt: string): Promise<void> {
+    if (!isValidAnalysisId(id)) return;
+    const day = expiresAt.slice(0, 10);
+    await mkdir(this.sibling("expiry", day), { recursive: true });
+    await writeFile(this.sibling("expiry", day, id), "", "utf8");
+  }
+
+  async listExpiredIds(now: Date): Promise<string[]> {
+    const today = now.toISOString().slice(0, 10);
+    const ids: string[] = [];
+    let days: string[];
+    try {
+      days = await readdir(this.sibling("expiry"));
+    } catch {
+      return [];
+    }
+    for (const day of days.sort()) {
+      if (day > today) continue;
+      ids.push(...(await readdir(this.sibling("expiry", day))).filter(isValidAnalysisId));
+    }
+    return ids.sort();
+  }
+
+  async deleteAnalysis(id: string): Promise<void> {
+    if (!isValidAnalysisId(id)) return;
+    await rm(path.join(this.dataDir, `${id}.json`), { force: true });
+    await rm(this.sibling("explanations", id), { recursive: true, force: true });
+    await rm(this.sibling("owners", `${id}.json`), { force: true });
+    let days: string[] = [];
+    try {
+      days = await readdir(this.sibling("expiry"));
+    } catch {
+      // No markers were ever written.
+    }
+    for (const day of days) await rm(this.sibling("expiry", day, id), { force: true });
   }
 }
 
