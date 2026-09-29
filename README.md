@@ -69,6 +69,13 @@ and importers, inspect confidence evidence, and retrace your steps with the
 breadcrumb and investigation trail. Every position has a URL, so a link opens
 exactly what you were looking at.
 
+### Presentation-ready diagrams
+
+Export the architecture as a figure you can drop into a README, design doc,
+or slide: grouped by folder, arrows weighted by import count, with a legend,
+a note of anything left out, and a line saying where it came from. Download
+SVG or 2× PNG, copy Mermaid for GitHub, or embed a live image link.
+
 ## How it works
 
 1. You upload a repository as a `.zip`.
@@ -145,6 +152,28 @@ A provider that has just rate-limited or overloaded is tried last until its
 cooldown passes. Explanations are cached per analysis and subject, so opening
 the same explanation again costs no quota. **Regenerate** bypasses the cache.
 Provider keys stay on the server.
+
+## Export diagrams
+
+Press **E** (or **Export**) in the workspace.
+
+| Choice | Options |
+| --- | --- |
+| Format for | Document (wide, for READMEs and docs) or Slide (1920×1080) |
+| Detail | Overview (top-level parts) or Standard (large folders split into their sub-folders) |
+| Theme | Light, Dark, or Print (no colour; cycles are dashed) |
+| Output | SVG, PNG at 2×, Mermaid, Markdown, or an embed link |
+
+Every box is a folder or file group, and every arrow aggregates real import
+statements; the number on an arrow is how many file-level imports it carries.
+Anything left out (tests, weaker connections, less-connected files) is stated
+on the figure.
+
+Embed a figure that stays current with its analysis:
+
+```markdown
+![Architecture](https://cartograph-dev.vercel.app/api/diagram/<id>?preset=document)
+```
 
 ## Safety and limits
 
