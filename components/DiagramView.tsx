@@ -53,6 +53,8 @@ import { ZoomControls } from "./ZoomControls";
 import { DownloadIcon, LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
 import { ExportDialog } from "./ExportDialog";
 import { copyShareLink } from "@/lib/workspace/share";
+import { forgetOwnerToken, loadOwnerToken, saveOwnerToken, takeOwnerFragment } from "@/lib/workspace/ownerToken";
+import { OwnerNotice } from "./OwnerNotice";
 
 /* ─── Types ─── */
 type FlowNode = Node<RenderNodeData, "architecture">;
@@ -332,6 +334,60 @@ function DiagramInner({
   const exportButton = useRef<HTMLButtonElement>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [trail, setTrail] = useState<ReadonlyArray<TrailEntry>>([]);
+  const [ownerToken, setOwnerToken] = useState<string | null>(null);
+  const [newUpload, setNewUpload] = useState<string | null>(null); // expiresAt or "manual"
+  const [moreOpen, setMoreOpen] = useState(false);
+  // The rail clips its overflow, so the menu is placed against the viewport.
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Browser-only state is read after mount so server and client render the
+    // same markup; the setters run in a microtask, not the effect body.
+    // An owner link from another device: store the token, then strip it from the address bar.
+    const fromFragment = takeOwnerFragment(window.location.hash);
+    if (fromFragment) {
+      saveOwnerToken(result.id, fromFragment);
+      history.replaceState(history.state, "", window.location.pathname + window.location.search);
+    }
+    let marker: string | null = null;
+    try { marker = window.sessionStorage.getItem(`cartograph:new:${result.id}`); } catch { /* unavailable */ }
+    const token = loadOwnerToken(result.id);
+    queueMicrotask(() => {
+      setOwnerToken(token);
+      if (marker) setNewUpload(marker);
+    });
+  }, [result.id]);
+
+  const deleteAnalysis = useCallback(async () => {
+    if (!ownerToken) return;
+    setDeleteError(null);
+    const response = await fetch(`/api/analysis/${result.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${ownerToken}` } });
+    if (response.status === 204) {
+      forgetOwnerToken(result.id);
+      router.push("/?deleted=1");
+      return;
+    }
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    setConfirmDelete(false);
+    setDeleteError(body.error ?? "The analysis could not be deleted.");
+  }, [ownerToken, result.id, router]);
+
+  /* The "···" menu closes on Escape or a click elsewhere. */
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMoreOpen(false); };
+    const onPointer = (e: PointerEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(".rail-more")) setMoreOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer);
+    };
+  }, [moreOpen]);
 
   const canvas = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useReactFlow();
@@ -1051,7 +1107,7 @@ function DiagramInner({
       }
       if ((e.key === "e" || e.key === "E") && !e.ctrlKey && !e.metaKey && !e.altKey) {
         // Other open UI owns the keyboard, and so do select and editable fields.
-        if (searchOpen || showConfirm || aiOpen || inferenceOpen || lensMenuOpen) return;
+        if (searchOpen || showConfirm || confirmDelete || moreOpen || aiOpen || inferenceOpen || lensMenuOpen) return;
         if (e.target instanceof HTMLSelectElement) return;
         if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
         e.preventDefault();
@@ -1076,7 +1132,7 @@ function DiagramInner({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [searchOpen, exportOpen, showConfirm, aiOpen, inferenceOpen, lensMenuOpen, selectedFile, reactFlowInstance, closePanel]);
+  }, [searchOpen, exportOpen, showConfirm, confirmDelete, moreOpen, aiOpen, inferenceOpen, lensMenuOpen, selectedFile, reactFlowInstance, closePanel]);
 
   /* ─── Lens names, for the active-lens indicator ─── */
   /**
@@ -1278,6 +1334,22 @@ function DiagramInner({
             <LinkIcon size={13} />
             {shareStatus === "copied" ? "Link copied" : shareStatus === "failed" ? "Copy failed" : "Share"}
           </button>
+          {ownerToken && (
+            <div className="rail-more">
+              <button type="button" className="rail-button" aria-haspopup="menu" aria-expanded={moreOpen} aria-label="More actions" onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                setMenuPos({ top: box.bottom + 4, right: window.innerWidth - box.right });
+                setMoreOpen((open) => !open);
+              }}>···</button>
+              {moreOpen && (
+                <div className="rail-menu" role="menu" style={menuPos ?? undefined}>
+                  <button type="button" role="menuitem" className="rail-menu-danger" onClick={() => { setMoreOpen(false); setConfirmDelete(true); }}>
+                    Delete analysis…
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -1524,6 +1596,29 @@ function DiagramInner({
           cancelLabel="Cancel"
           onConfirm={() => router.push("/")}
           onCancel={() => setShowConfirm(false)}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete this analysis?"
+          message="The map, its share link, and its cached AI explanations will be removed for everyone. This cannot be undone."
+          confirmLabel="Delete"
+          cancelLabel="Keep it"
+          onConfirm={deleteAnalysis}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+      {deleteError && <p className="rail-error" role="alert">{deleteError}</p>}
+      {newUpload && ownerToken && (
+        <OwnerNotice
+          analysisId={result.id}
+          expiresAt={newUpload === "manual" ? null : newUpload}
+          ownerToken={ownerToken}
+          onDismiss={() => {
+            setNewUpload(null);
+            try { window.sessionStorage.removeItem(`cartograph:new:${result.id}`); } catch { /* unavailable */ }
+          }}
         />
       )}
 

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { MarkIcon } from "@/components/Icons";
 import { isUsingBlobStorage } from "@/lib/storage";
 
-export default function HomePage() {
+export default async function HomePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const deleted = (await searchParams).deleted === "1";
   return (
     <main className="landing-shell">
       <header className="site-header">
@@ -33,6 +34,7 @@ export default function HomePage() {
           Nothing is inferred from folder names, and anything that could not be
           resolved is drawn as unresolved rather than quietly dropped.
         </p>
+        {deleted && <p className="home-notice" role="status">Analysis deleted. Its link no longer works.</p>}
         <UploadForm useBlob={isUsingBlobStorage()} />
         <p className="privacy-note">
           Archives are deleted after analysis. The map is public to anyone with its link until it expires or you delete it.
