@@ -93,6 +93,8 @@ export type RenderNodeData = {
   folder?: string;
   filePath?: string;
   fileIds?: string[];
+  /** Folder overview only, client-side: files / largest region's files, for the size bar. */
+  sizeShare?: number;
   /**
    * Unresolved stubs only: the raw specifier exactly as written in source.
    */

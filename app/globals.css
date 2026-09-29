@@ -1287,6 +1287,9 @@ h1, h2, h3, p { margin-top: 0; }
  * updating that model the result is a card slightly taller than its neighbours
  * — visible, correctable, and still a card containing its own text. */
 .architecture-node { width: 100%; min-height: 100%; padding: var(--space-3); color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-control); box-shadow: var(--shadow-flat); }
+/* Quantitative ink: how many files this region holds, relative to the largest. */
+.node-size-bar { display: block; height: 3px; margin-top: var(--space-2); background: var(--well); border-radius: 2px; overflow: hidden; }
+.node-size-bar > span { display: block; height: 100%; background: var(--rule-strong); }
 /* ─── Focus Contract ───────────────────────────────────────────────────
  *
  * One visual language, three persistence levels:

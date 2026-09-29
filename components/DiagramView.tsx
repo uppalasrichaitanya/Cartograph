@@ -36,6 +36,7 @@ import {
   type WorkspacePosition,
 } from "@/lib/workspace/position";
 import { cameraMotion, structuralLegDuration } from "@/lib/workspace/motion";
+import { edgeStrokeWidth, regionEdgeCounts, regionSizeShare } from "@/lib/workspace/regionEdges";
 import { buildSearchItems } from "@/lib/workspace/searchItems";
 import type { SearchTarget } from "@/lib/workspace/search";
 import {
@@ -127,6 +128,11 @@ function ArchitectureNode({ data }: NodeProps<FlowNode>) {
           {data.isBoundary ? " · collapsed" : ""}
         </span>
       )}
+      {data.kind === "folder" && !data.isBoundary && data.sizeShare !== undefined && (
+        <span className="node-size-bar" aria-hidden="true">
+          <span style={{ width: `${Math.round(data.sizeShare * 100)}%` }} />
+        </span>
+      )}
       {data.kind === "file" && <span>{data.filePath}</span>}
       {marker && <em className="confidence-marker">{marker}</em>}
       {data.reducedConfidenceCount ? (
@@ -200,14 +206,28 @@ function centeredWithInspector(nodeX: number, zoom: number, isOpen: boolean): nu
 }
 
 /* ─── Helpers ─── */
-function graphToFlow(graph: RenderGraph): { nodes: FlowNode[]; edges: Edge[] } {
+function graphToFlow(
+  graph: RenderGraph,
+  counts: ReadonlyMap<string, number> | null,
+): { nodes: FlowNode[]; edges: Edge[] } {
+  const maxFiles = Math.max(0, ...graph.nodes.map((node) => node.data.fileIds?.length ?? 0));
   return {
-    nodes: graph.nodes.map((node) => ({ ...node, type: "architecture" })),
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      type: "architecture",
+      data: counts && node.data.kind === "folder"
+        ? { ...node.data, sizeShare: regionSizeShare(node.data.fileIds?.length ?? 0, maxFiles) }
+        : node.data,
+    })),
     edges: graph.edges.map((edge) => {
       const confidence = edge.confidence ?? "derived";
+      const count = counts?.get(edge.id);
+      const baseWidth = count ? edgeStrokeWidth(count) : 1.4;
       return {
         ...edge,
-        type: "smoothstep",
+        // Region arrows are few and weighted; bezier curves keep parallel
+        // arrows apart instead of sharing one orthogonal trunk.
+        type: counts ? "default" : "smoothstep",
         // An arrowhead asserts arrival at a known target. An unresolved
         // import has no known target, so it gets none.
         ...(confidence === "unknown"
@@ -216,8 +236,8 @@ function graphToFlow(graph: RenderGraph): { nodes: FlowNode[]; edges: Edge[] } {
         className: `confidence-${confidence}`,
         // Kept in data so the highlight effect can recompute styling from
         // confidence instead of overwriting it.
-        data: { confidence },
-        style: { strokeWidth: 1.4, opacity: edgeRestOpacity(confidence) },
+        data: { confidence, count, baseWidth },
+        style: { strokeWidth: baseWidth, opacity: edgeRestOpacity(confidence) },
       };
     }),
   };
@@ -394,7 +414,12 @@ function DiagramInner({
   );
 
   const renderGraph = folder ? result.renderData.fileViewByFolder[folder] : result.renderData.folderView;
-  const initial = useMemo(() => graphToFlow(renderGraph), [renderGraph]);
+  const regionCounts = useMemo(() => regionEdgeCounts(result.graph), [result.graph]);
+  const initial = useMemo(
+    () => graphToFlow(renderGraph, folder ? null : regionCounts),
+    [renderGraph, folder, regionCounts],
+  );
+  const rootFiles = result.graph.nodes.filter((node) => !node.path.includes("/")).length;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
 
@@ -787,7 +812,9 @@ function DiagramInner({
         // interaction — a highlighted heuristic edge stays visibly heuristic.
         const confidence = (edge.data?.confidence ?? "derived") as GeometryConfidence;
         const restOpacity = edgeRestOpacity(confidence);
-        const strokeWidth = isHighlighted ? 2.5 : 1.4;
+        const baseWidth = (edge.data?.baseWidth as number | undefined) ?? 1.4;
+        const strokeWidth = isHighlighted ? Math.max(2.5, baseWidth + 0.75) : baseWidth;
+        const count = edge.data?.count as number | undefined;
         // Receded, not removed — matching the node rule. The former 0.12
         // made an edge effectively invisible.
         const dimFactor = activeIds || subjectId ? (isHighlighted ? 1 : 0.35) : 1;
@@ -799,6 +826,13 @@ function DiagramInner({
 
         return {
           ...edge,
+          // Counts show only on arrows attached to what the reader is looking
+          // at; labelling every arrow at once is noise.
+          label: isHighlighted && count ? `${count}` : undefined,
+          labelBgPadding: [4, 2] as [number, number],
+          labelBgBorderRadius: 3,
+          labelBgStyle: { fill: "var(--paper)" },
+          labelStyle: { fill: "var(--ink-muted)", fontFamily: "var(--type-mono)", fontSize: 11 },
           style: {
             ...edge.style,
             strokeWidth,
@@ -1408,17 +1442,14 @@ function DiagramInner({
               <span className="inference-group-count">{group.memberNodeIds.length} files</span>
             </div>
           ))}
-          {(() => {
-            const rootFiles = result.graph.nodes.filter((node) => !node.path.includes("/")).length;
-            return rootFiles > 0 ? (
-              <div className="inference-group">
-                <span className="inference-group-kind">root</span>
-                <span className="inference-group-name">Root files</span>
-                <span className="inference-group-count">{rootFiles} files</span>
-              </div>
-            ) : null;
-          })()}
-          {result.architectureInferences.groups.length === 0 &&<p className="lens-item-empty">No inferred groups.</p>}
+          {rootFiles > 0 && (
+            <div className="inference-group">
+              <span className="inference-group-kind">root</span>
+              <span className="inference-group-name">Root files</span>
+              <span className="inference-group-count">{rootFiles} files</span>
+            </div>
+          )}
+          {result.architectureInferences.groups.length === 0 && rootFiles === 0 && <p className="lens-item-empty">No inferred groups.</p>}
         </div>
       )}
 
