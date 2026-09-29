@@ -475,3 +475,13 @@ test("Phase 8 — generated reasoning stays unmistakable", () => {
   assert.match(body!, /font-style:\s*italic/);
   assert.match(body!, /serif/);
 });
+
+test("landing copy names every supported language", () => {
+  assert.match(PAGE, /Python · Go/);
+  const upload = read("components", "UploadForm.tsx");
+  assert.match(upload, /Python &amp; Go/);
+});
+
+test("specimen annotations sit on a paper halo", () => {
+  assert.match(CSS, /\.spec-note\s*{[^}]*paint-order:\s*stroke/);
+});

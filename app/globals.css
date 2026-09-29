@@ -545,7 +545,16 @@ h1, h2, h3, p { margin-top: 0; }
 /* Margin annotations — the surveyor's hand, added after the plate was
  * pressed. Rust, because a correction is overprinted in the same ink the
  * product marks attention with. */
-.spec-note { fill: var(--focus-deep); font-family: var(--type-mono); font-size: 9.5px; }
+.spec-note {
+  fill: var(--focus-deep);
+  font-family: var(--type-mono);
+  font-size: 9.5px;
+  /* A paper halo, so registration marks under the note never cross its letters. */
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
 
 /* The legend. Four rows, keyed to the drawing above. */
 .specimen-legend {

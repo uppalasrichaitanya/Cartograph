@@ -1408,7 +1408,17 @@ function DiagramInner({
               <span className="inference-group-count">{group.memberNodeIds.length} files</span>
             </div>
           ))}
-          {result.architectureInferences.groups.length === 0 && <p className="lens-item-empty">No inferred groups.</p>}
+          {(() => {
+            const rootFiles = result.graph.nodes.filter((node) => !node.path.includes("/")).length;
+            return rootFiles > 0 ? (
+              <div className="inference-group">
+                <span className="inference-group-kind">root</span>
+                <span className="inference-group-name">Root files</span>
+                <span className="inference-group-count">{rootFiles} files</span>
+              </div>
+            ) : null;
+          })()}
+          {result.architectureInferences.groups.length === 0 &&<p className="lens-item-empty">No inferred groups.</p>}
         </div>
       )}
 

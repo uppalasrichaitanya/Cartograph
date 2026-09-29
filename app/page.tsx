@@ -21,7 +21,7 @@ export default function HomePage() {
             they are looking at in order to judge it. */}
         <p className="eyebrow">
           <span className="eyebrow-rule" aria-hidden="true" />
-          Dependency survey · JS · TS · Python
+          Dependency survey · JS · TS · Python · Go
         </p>
         <h1>
           Every edge is read from
