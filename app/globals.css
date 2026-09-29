@@ -2014,6 +2014,46 @@ h1, h2, h3, p { margin-top: 0; }
 .confirm-dialog .button-danger { color: var(--surface); background: var(--danger); border: 0; }
 .confirm-dialog .button-danger:hover { background: #7A1A1A; }
 
+/* ─── Export Dialog ───────────────────────────────────────────────────
+ *
+ * The preview is the exported file itself, laid on the table like a plate
+ * under review; the controls sit in the margin beside it. */
+.export-dialog {
+  width: min(1120px, calc(100vw - var(--space-6)));
+  max-height: calc(100vh - var(--space-6));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-over);
+  animation: dialogScaleIn var(--motion-connective) var(--motion-ease) forwards;
+}
+.export-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--rule); }
+.export-head h2 { margin: 0; font-size: var(--text-title); letter-spacing: var(--track-title); }
+.export-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--space-5); padding: var(--space-5); overflow: auto; }
+.export-preview { margin: 0; display: grid; gap: var(--space-2); align-content: start; }
+.export-preview img { width: 100%; height: auto; border: 1px solid var(--rule); border-radius: var(--radius-control); background: var(--paper); transition: opacity var(--motion-connective) var(--motion-ease); }
+.export-preview.is-loading img { opacity: .55; }
+.export-preview-empty { display: grid; place-items: center; min-height: 320px; color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-caption); border: 1px dashed var(--rule); border-radius: var(--radius-control); }
+.export-warning { color: var(--amber); font-size: var(--text-small); }
+.export-error { color: var(--danger); font-size: var(--text-small); }
+.export-controls { display: grid; gap: var(--space-4); align-content: start; }
+.export-field { display: grid; gap: var(--space-1); }
+.export-field-label { color: var(--ink-faint); font-family: var(--type-mono); font-size: var(--text-micro); letter-spacing: .08em; text-transform: uppercase; }
+.export-segmented { display: flex; flex-wrap: wrap; border: 1px solid var(--rule-strong); border-radius: var(--radius-control); overflow: hidden; }
+.export-segmented button { flex: 1; min-height: 32px; padding: 0 var(--space-3); border: 0; border-right: 1px solid var(--rule); background: var(--surface); color: var(--ink-muted); font-size: var(--text-small); cursor: pointer; }
+.export-segmented button:last-child { border-right: 0; }
+.export-segmented button.is-on { background: var(--focus-wash); color: var(--focus-deep); font-weight: 600; }
+.export-segmented button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.export-check { display: flex; gap: var(--space-2); align-items: center; color: var(--ink-muted); font-size: var(--text-small); }
+.export-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; justify-content: flex-end; padding: var(--space-4) var(--space-5); border-top: 1px solid var(--rule); }
+.export-status { margin-right: auto; color: var(--forest); font-size: var(--text-small); }
+@media (max-width: 768px) {
+  .export-body { grid-template-columns: 1fr; }
+  .export-controls { order: -1; }
+}
+
 /* ─── Search Overlay ───────────────────────────────────────────────────
  *
  * The gazetteer. A chart's index of place names, opened over the drawing:

@@ -5,7 +5,7 @@ import path from "node:path";
 import { buildDiagramModel } from "@/lib/diagram/model";
 import { mermaidMarkdown, renderMermaid } from "@/lib/diagram/mermaid";
 import { defaultDiagramOptions } from "@/lib/diagram/options";
-import { makeResult, many, webApp } from "./fixtures";
+import { loop, makeResult, many, webApp } from "./fixtures";
 
 const ORIGIN = "https://cartograph.test";
 const options = defaultDiagramOptions("document");
@@ -34,6 +34,13 @@ test("labels cannot break the syntax", () => {
   const model = buildDiagramModel(makeResult({ ...many('x"<y>`', 3) }), { ...options, detail: "overview" });
   const mermaid = renderMermaid(model, ORIGIN);
   assert.match(mermaid, /\["x#quot;y<br\/>/);
+});
+
+test("only mutual imports mark a cycle class", () => {
+  const cyclic = renderMermaid(buildDiagramModel(loop(), options), ORIGIN);
+  assert.match(cyclic, /class u_a,u_b cycle/);
+  const plain = renderMermaid(buildDiagramModel(webApp(), options), ORIGIN);
+  assert.doesNotMatch(plain, /^\s*class .* cycle$/m);
 });
 
 test("markdown wraps the block and credits the source", () => {

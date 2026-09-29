@@ -321,7 +321,7 @@ test("Phase 8 — the glyph set is one coherent system", () => {
 
   for (const component of [
     "MarkIcon", "SearchIcon", "FitIcon",
-    "ZoomInIcon", "ZoomOutIcon", "CloseIcon",
+    "ZoomInIcon", "ZoomOutIcon", "CloseIcon", "DownloadIcon",
   ]) {
     assert.ok(ICONS.includes(`export function ${component}`), `${component} should exist`);
   }

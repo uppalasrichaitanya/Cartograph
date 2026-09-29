@@ -50,7 +50,8 @@ import { BreadcrumbNav } from "./BreadcrumbNav";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SearchOverlay } from "./SearchOverlay";
 import { ZoomControls } from "./ZoomControls";
-import { LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
+import { DownloadIcon, LinkIcon, MarkIcon, SearchIcon, SparkIcon } from "./Icons";
+import { ExportDialog } from "./ExportDialog";
 import { copyShareLink } from "@/lib/workspace/share";
 
 /* ─── Types ─── */
@@ -325,6 +326,7 @@ function DiagramInner({
   const [lensMenuOpen, setLensMenuOpen] = useState(false);
   const [inferenceOpen, setInferenceOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [trail, setTrail] = useState<ReadonlyArray<TrailEntry>>([]);
 
@@ -1030,9 +1032,17 @@ function DiagramInner({
       // Don't handle when typing in inputs.
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+      // The export dialog owns the keyboard while it is open.
+      if (exportOpen) return;
+
       if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "f")) {
         e.preventDefault();
         setSearchOpen(true);
+        return;
+      }
+      if ((e.key === "e" || e.key === "E") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setExportOpen(true);
         return;
       }
       if (e.key === "Escape") {
@@ -1053,7 +1063,7 @@ function DiagramInner({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [searchOpen, selectedFile, reactFlowInstance, closePanel]);
+  }, [searchOpen, exportOpen, selectedFile, reactFlowInstance, closePanel]);
 
   /* ─── Lens names, for the active-lens indicator ─── */
   /**
@@ -1229,6 +1239,15 @@ function DiagramInner({
             aria-haspopup="dialog"
           >
             <SparkIcon size={13} /> AI explain
+          </button>
+          <button
+            type="button"
+            className="rail-button"
+            onClick={() => setExportOpen(true)}
+            aria-haspopup="dialog"
+            aria-keyshortcuts="E"
+          >
+            <DownloadIcon size={13} /> Export
           </button>
           <button
             type="button"
@@ -1491,6 +1510,15 @@ function DiagramInner({
           cancelLabel="Cancel"
           onConfirm={() => router.push("/")}
           onCancel={() => setShowConfirm(false)}
+        />
+      )}
+
+      {exportOpen && (
+        <ExportDialog
+          analysisId={result.id}
+          repoName={result.repoMeta.repoName}
+          region={folder}
+          onClose={() => setExportOpen(false)}
         />
       )}
 

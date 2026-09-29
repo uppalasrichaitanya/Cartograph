@@ -132,3 +132,11 @@ export function LinkIcon({ size = 16 }: IconProps) {
     </Glyph>
   );
 }
+
+export function DownloadIcon({ size = 16 }: IconProps) {
+  return (
+    <Glyph size={size}>
+      <path d="M8 2.5v7.5M4.75 6.75 8 10l3.25-3.25M3 12.75h10" />
+    </Glyph>
+  );
+}
