@@ -35,7 +35,7 @@ export default function HomePage() {
         </p>
         <UploadForm useBlob={isUsingBlobStorage()} />
         <p className="privacy-note">
-          Archives are removed from the analysis worker when processing ends.
+          Archives are deleted after analysis. The map is public to anyone with its link until it expires or you delete it.
         </p>
       </section>
 
