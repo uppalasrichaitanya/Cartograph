@@ -232,7 +232,11 @@ function graphToFlow(
         // import has no known target, so it gets none.
         ...(confidence === "unknown"
           ? {}
-          : { markerEnd: { type: "arrowclosed" as const } }),
+          : {
+              markerEnd: counts
+                ? { type: "arrowclosed" as const, markerUnits: "userSpaceOnUse", width: 14, height: 14 }
+                : { type: "arrowclosed" as const },
+            }),
         className: `confidence-${confidence}`,
         // Kept in data so the highlight effect can recompute styling from
         // confidence instead of overwriting it.
