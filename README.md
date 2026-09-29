@@ -254,6 +254,7 @@ trace.
 npm test
 npm run lint
 npm run build
+npm run test:e2e   # browser smoke test: upload, map, AI panel, export, delete
 ```
 
 The test suite covers parser conformance, IR validation, deterministic layout,
