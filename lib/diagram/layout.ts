@@ -94,6 +94,12 @@ function toPositioned(model: DiagramModel, result: ElkNode, reserveCaption: bool
     }
   };
   walk(result, { x: 0, y: 0 });
+  // A missing box means ELK dropped a node: throw so layoutDiagram falls back to the grid.
+  const boxOf = (id: string): Box => {
+    const box = boxes.get(id);
+    if (!box) throw new Error(`Layout returned no box for ${id}.`);
+    return box;
+  };
 
   const edgeById = new Map(model.edges.map((edge) => [edge.id, edge]));
   const positionedEdges: PositionedEdge[] = [];
@@ -119,10 +125,10 @@ function toPositioned(model: DiagramModel, result: ElkNode, reserveCaption: bool
 
   return {
     model,
-    width: Math.ceil(result.width ?? 0),
-    height: Math.ceil(result.height ?? 0),
-    units: new Map(model.units.map((unit) => [unit.id, boxes.get(unit.id)!])),
-    groups: new Map(model.groups.map((group) => [group.id, boxes.get(group.id)!])),
+    width: Math.max(40, Math.ceil(result.width ?? 0)),
+    height: Math.max(40, Math.ceil(result.height ?? 0)),
+    units: new Map(model.units.map((unit) => [unit.id, boxOf(unit.id)])),
+    groups: new Map(model.groups.map((group) => [group.id, boxOf(group.id)])),
     edges: positionedEdges,
     simplified: false,
     reserveCaption,
@@ -130,14 +136,15 @@ function toPositioned(model: DiagramModel, result: ElkNode, reserveCaption: bool
 }
 
 /** If ELK fails, draw a plain grid with straight arrows, and say so on the figure. */
-function gridFallback(
+export function gridFallback(
   model: DiagramModel,
   sizes: ReadonlyMap<string, { width: number; height: number }>,
   reserveCaption: boolean,
 ): PositionedDiagram {
   const columns = Math.max(1, Math.ceil(Math.sqrt(model.units.length)));
-  const cellWidth = Math.max(...[...sizes.values()].map((size) => size.width)) + 60;
-  const cellHeight = Math.max(...[...sizes.values()].map((size) => size.height)) + 60;
+  // Math.max of nothing is -Infinity, so an empty figure gets a plain minimum canvas.
+  const cellWidth = Math.max(0, ...[...sizes.values()].map((size) => size.width)) + 60;
+  const cellHeight = Math.max(0, ...[...sizes.values()].map((size) => size.height)) + 60;
   const units = new Map<string, Box>();
   model.units.forEach((unit, index) => {
     const size = sizes.get(unit.id)!;
@@ -146,8 +153,8 @@ function gridFallback(
   const center = (box: Box): Point => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
   return {
     model,
-    width: 40 + columns * cellWidth,
-    height: 40 + Math.ceil(model.units.length / columns) * cellHeight,
+    width: Math.max(40, 40 + columns * cellWidth),
+    height: Math.max(40, 40 + Math.ceil(model.units.length / columns) * cellHeight),
     units,
     groups: new Map(),
     edges: model.edges.map((edge) => ({

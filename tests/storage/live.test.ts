@@ -35,3 +35,13 @@ test("a missing analysis is null", async () => {
   const { store } = fakeStore(null);
   assert.equal(await loadLiveAnalysis(store, ID, now), null);
 });
+
+test("the background delete goes through the supplied scheduler", async () => {
+  const { store, deleted } = fakeStore({ id: ID, retention: { expiresAt: "2026-10-29T00:00:00.000Z" } });
+  const scheduled: Array<() => Promise<void>> = [];
+  assert.equal(await loadLiveAnalysis(store, ID, now, (task) => { scheduled.push(task); }), null);
+  assert.equal(scheduled.length, 1);
+  assert.deepEqual(deleted, []);
+  await scheduled[0]();
+  assert.deepEqual(deleted, [ID]);
+});

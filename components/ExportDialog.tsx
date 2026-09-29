@@ -91,6 +91,8 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
   const [scale, setScale] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Whether the last preview fetch failed: `svg` then belongs to older options.
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   // A review belongs to the figure it was made for (the options that shape the model).
   const [stored, setStored] = useState<{ key: string; review: Review } | null>(null);
@@ -122,8 +124,10 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
   // Debounced preview: the previous image stays (dimmed) until the next is ready.
   useEffect(() => {
     const controller = new AbortController();
+    // Mark the figure stale at once, not after the debounce, so a download cannot slip in.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
     const timer = setTimeout(async () => {
-      setLoading(true);
       try {
         const response = await fetch(`${apiUrl("svg")}&n=${previewNonce}`, { signal: controller.signal });
         if (!response.ok) {
@@ -139,7 +143,9 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
         });
         setReviewMissing(response.headers.get("X-Cartograph-Review") === "missing");
         setError(null);
+        setPreviewFailed(false);
       } catch (caught) {
+        if (!controller.signal.aborted) setPreviewFailed(true);
         if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "The diagram could not be created.");
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -170,6 +176,9 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   };
+
+  // Downloads use the fetched figure, so they wait for it to match the current options.
+  const stale = loading || previewFailed;
 
   const flash = (message: string) => { setStatus(message); setTimeout(() => setStatus(null), 2_000); };
   const shareUrl = useMemo(() => (typeof window === "undefined" ? "" : `${window.location.origin}/repo/${analysisId}`), [analysisId]);
@@ -320,11 +329,11 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
 
         <footer className="export-actions">
           <span className="export-status" aria-live="polite">{status}</span>
-          <button type="button" className="button button-secondary" onClick={copyMarkdown}>Copy Markdown</button>
+          <button type="button" className="button button-secondary" onClick={copyMarkdown} disabled={stale}>Copy Markdown</button>
           <button type="button" className="button button-secondary" onClick={copyEmbed}>Copy embed link</button>
-          <button type="button" className="button button-secondary" onClick={downloadMermaid}>Mermaid</button>
-          <button type="button" className="button button-secondary" onClick={downloadPng} disabled={!svg}>PNG</button>
-          <button type="button" className="button button-primary" onClick={downloadSvg} disabled={!svg}><DownloadIcon size={13} /> SVG</button>
+          <button type="button" className="button button-secondary" onClick={downloadMermaid} disabled={stale}>Mermaid</button>
+          <button type="button" className="button button-secondary" onClick={downloadPng} disabled={!svg || stale}>PNG</button>
+          <button type="button" className="button button-primary" onClick={downloadSvg} disabled={!svg || stale}><DownloadIcon size={13} /> SVG</button>
         </footer>
       </div>
     </div>

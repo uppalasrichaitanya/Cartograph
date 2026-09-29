@@ -74,3 +74,13 @@ test("a clean repository has no findings", () => {
   // b/f00 also imports inside b, so it is not "misplaced" despite three importers from a.
   assert.deepEqual(kinds({ ...many("a", 3, ["b/f00.ts"]), "b/f00.ts": ["b/f01.ts"], "b/f01.ts": [], "b/f02.ts": [] }), []);
 });
+
+test("test-leak in a region counts only leaks from files drawn in the region", () => {
+  const region = (id: string) => ({ ...defaultDiagramOptions("document"), scope: { kind: "region" as const, id } });
+  const result = makeResult({ ...many("a", 5), ...many("b", 5, ["b/f00.ts"]), "a/x.ts": ["tests/helper.ts"], "tests/helper.ts": [] });
+  const outside = buildDiagramModel(result, region("b")).findings.filter((finding) => finding.kind === "test-leak");
+  assert.deepEqual(outside, []);
+  const inside = buildDiagramModel(result, region("a")).findings.find((finding) => finding.kind === "test-leak");
+  assert.ok(inside && inside.subjects.length > 0);
+  assert.match(inside.text, /a\/x\.ts imports tests\/helper\.ts/);
+});

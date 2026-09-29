@@ -15,7 +15,7 @@ import type { AiEvidenceCatalog, AiResponse, GroundedClaim } from "@/lib/ai/type
 import type { AnalysisResult } from "@/types/graph";
 import type { DiagramModel, DiagramNote, DiagramReviewAnnotations } from "./types";
 
-export const REVIEW_PROMPT_VERSION = 1;
+export const REVIEW_PROMPT_VERSION = 2;
 
 const LIMITS = { units: 26, edges: 40, keyFiles: 3, declarations: 6, captionChars: 48, noteChars: 240, notes: 6 } as const;
 
@@ -166,7 +166,8 @@ export function finalizeReview(response: AiResponse, prompt: ReviewPrompt): { re
 
 export function reviewCacheKey(model: DiagramModel): string {
   const fingerprint = createHash("sha256").update(JSON.stringify({
-    units: model.units.map((unit) => unit.id),
+    // Notes may quote a unit's file or line count, so those belong to the figure's identity.
+    units: model.units.map((unit) => `${unit.id}:${unit.files}:${unit.lines}:${unit.sharedBy ?? 0}`),
     edges: model.edges.map((edge) => `${edge.id}:${edge.count}`),
     findings: model.findings.map((finding) => finding.id),
   })).digest("hex");

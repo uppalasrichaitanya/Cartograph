@@ -82,8 +82,9 @@ export function runDiagramChecks(input: ChecksInput): DiagramFinding[] {
     });
   }
 
-  // test-leak — production files importing test files (evaluated on the whole graph).
-  const leaks = input.graph.edges.filter((edge) => !input.isTest(edge.from) && input.isTest(edge.to));
+  // test-leak — production files importing test files. Only leaks whose source
+  // file is drawn on this figure count, so a region never cites outside files.
+  const leaks = input.graph.edges.filter((edge) => !input.isTest(edge.from) && input.isTest(edge.to) && input.unitOfFile.has(edge.from));
   if (leaks.length > 0) {
     const first = [...leaks].sort((a, b) => byString(a.id, b.id))[0];
     const subjects = [...new Set(leaks.map((edge) => input.unitOfFile.get(edge.from)).filter((id): id is string => Boolean(id)))].sort(byString);

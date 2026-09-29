@@ -115,3 +115,31 @@ for (const [name, over] of [
     assert.equal(svg, readFileSync(file, "utf8"), "run with UPDATE_GOLDEN=1 after reviewing the change");
   });
 }
+
+async function renderWith(over: (model: ReturnType<typeof buildDiagramModel>) => ReturnType<typeof buildDiagramModel>, preset: "document" | "slide" = "document") {
+  const options = defaultDiagramOptions(preset);
+  const model = over(buildDiagramModel(webApp(), options));
+  const positioned = await layoutDiagram(model, options);
+  return renderSvg({ positioned: { ...positioned, model }, options, annotations: NONE, origin: ORIGIN, embedFonts: false });
+}
+
+test("a long shared-parts list cannot push out Partial evidence; the list is capped", async () => {
+  for (const preset of ["document", "slide"] as const) {
+    const { svg, width, height } = await renderWith((model) => ({
+      ...model,
+      partialEvidence: true,
+      omitted: { ...model.omitted, sharedEdges: 5 },
+      units: model.units.map((unit, index) => ({ ...unit, sharedBy: 4, label: `shared-part-number-${index}` })),
+    }), preset);
+    assert.match(svg, /Partial evidence/);
+    assert.match(svg, /\+\d+ more\) are not drawn/);
+    if (preset === "slide") assert.deepEqual([width, height], [1920, 1080]);
+  }
+});
+
+test("the weaker-connections clause is singular for one import", async () => {
+  const one = await renderWith((model) => ({ ...model, omitted: { ...model.omitted, edges: 2, edgeMaxCount: 1 } }));
+  assert.match(one.svg, /\(1 import each\)/);
+  const many = await renderWith((model) => ({ ...model, omitted: { ...model.omitted, edges: 2, edgeMaxCount: 3 } }));
+  assert.match(many.svg, /\(at most 3 imports each\)/);
+});

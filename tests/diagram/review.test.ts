@@ -75,6 +75,12 @@ test("the cache key is stable, 64 hex characters, and changes with the figure", 
   assert.notEqual(a, reviewCacheKey(buildDiagramModel(loop(), options)));
 });
 
+test("the cache key changes when a unit's line count changes", () => {
+  const base = model();
+  const edited = { ...base, units: base.units.map((unit, index) => (index === 0 ? { ...unit, lines: unit.lines + 1 } : unit)) };
+  assert.notEqual(reviewCacheKey(base), reviewCacheKey(edited));
+});
+
 test("stored reviews become annotations only for units on this figure", () => {
   const annotations = reviewAnnotations({
     answer: "S.",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { layoutDiagram } from "@/lib/diagram/layout";
+import { gridFallback, layoutDiagram } from "@/lib/diagram/layout";
 import { buildDiagramModel } from "@/lib/diagram/model";
 import { defaultDiagramOptions } from "@/lib/diagram/options";
 import type { Box } from "@/lib/diagram/types";
@@ -103,3 +103,11 @@ for (const [name, build] of [["webApp", webApp], ["a larger grouped repository",
     }
   });
 }
+
+test("an empty figure has a finite canvas, from ELK and from the grid fallback", async () => {
+  const model = { ...buildDiagramModel(webApp(), options), units: [], groups: [], edges: [] };
+  const laid = await layoutDiagram(model, options);
+  assert.ok(Number.isFinite(laid.width) && Number.isFinite(laid.height) && laid.width >= 40 && laid.height >= 40);
+  const grid = gridFallback(model, new Map(), false);
+  assert.ok(Number.isFinite(grid.width) && Number.isFinite(grid.height) && grid.width >= 40 && grid.height >= 40);
+});
