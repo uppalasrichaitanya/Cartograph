@@ -30,3 +30,26 @@ test("asking for AI notes without a cached review is reported, not fatal", async
   const rendered = await renderDiagram(webApp(), { ...defaultDiagramOptions(), annotations: "measured+ai" }, "svg", context);
   assert.equal(rendered.reviewMissing, true);
 });
+
+test("AI annotations are loaded only when asked for, and drawn when present", async () => {
+  let calls = 0;
+  const loadReview = async () => {
+    calls += 1;
+    return { captions: new Map([["u:app", "Web entry points"]]), notes: [] };
+  };
+  await renderDiagram(webApp(), defaultDiagramOptions(), "svg", { ...context, loadReview });
+  assert.equal(calls, 0);
+  const rendered = await renderDiagram(webApp(), { ...defaultDiagramOptions(), annotations: "measured+ai" }, "svg", { ...context, loadReview });
+  assert.equal(calls, 1);
+  assert.equal(rendered.reviewMissing, false);
+  assert.match(rendered.body, /Web entry points/);
+});
+
+test("mermaid never asks for AI annotations", async () => {
+  let calls = 0;
+  await renderDiagram(webApp(), { ...defaultDiagramOptions(), annotations: "measured+ai" }, "mermaid", {
+    ...context,
+    loadReview: async () => { calls += 1; return null; },
+  });
+  assert.equal(calls, 0);
+});

@@ -30,7 +30,12 @@ export async function renderDiagram(
   result: AnalysisResult,
   options: DiagramOptions,
   format: DiagramFormat,
-  context: Readonly<{ origin: string; review?: DiagramReviewAnnotations | null; embedFonts?: boolean }>,
+  context: Readonly<{
+    origin: string;
+    embedFonts?: boolean;
+    /** Reads a cached AI review for this exact figure. Never generates one. */
+    loadReview?: (model: DiagramModel) => Promise<DiagramReviewAnnotations | null>;
+  }>,
 ): Promise<RenderedDiagram> {
   const model = buildDiagramModel(result, options);
   if (format === "mermaid") {
@@ -43,7 +48,7 @@ export async function renderDiagram(
     };
   }
   const wantsAi = options.annotations === "measured+ai";
-  const review = wantsAi ? context.review ?? null : null;
+  const review = wantsAi && context.loadReview ? await context.loadReview(model) : null;
   const positioned = await layoutDiagram(model, options);
   const rendered = renderSvg({
     positioned,

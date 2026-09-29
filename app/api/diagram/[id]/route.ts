@@ -1,4 +1,5 @@
 import { DiagramOptionsError, DiagramScopeError, parseDiagramOptions, renderDiagram } from "@/lib/diagram";
+import { isStoredReview, reviewAnnotations, reviewCacheKey } from "@/lib/diagram/review";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 import { getStorage } from "@/lib/storage";
 
@@ -28,7 +29,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   let rendered;
   try {
-    rendered = await renderDiagram(result, parsed.options, parsed.format, { origin: url.origin, review: null });
+    const storage = getStorage();
+    rendered = await renderDiagram(result, parsed.options, parsed.format, {
+      origin: url.origin,
+      loadReview: async (model) => {
+        const cached = await storage.loadExplanation(id, reviewCacheKey(model));
+        return isStoredReview(cached) ? reviewAnnotations(cached, model) : null;
+      },
+    });
   } catch (error) {
     if (error instanceof DiagramScopeError) return Response.json({ error: error.message }, { status: 404 });
     throw error;
@@ -46,5 +54,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   if (rendered.scale !== null) headers.set("X-Cartograph-Scale", String(Math.round(rendered.scale * 100) / 100));
   if (rendered.reviewMissing) headers.set("X-Cartograph-Review", "missing");
+  // A figure that asked for AI notes but has none yet must not sit in the CDN
+  // for an hour; the review may finish a minute from now.
+  if (rendered.reviewMissing) headers.set("Cache-Control", "no-store");
   return new Response(rendered.body, { headers });
 }

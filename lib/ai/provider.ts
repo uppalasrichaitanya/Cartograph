@@ -32,6 +32,11 @@ function configuredProviders(): ProviderConfig[] {
     .map(([name, key, model]) => ({ name, key, model: model?.trim() || DEFAULT_MODELS[name] }));
 }
 
+/** Whether any provider key is configured on this deployment. */
+export function hasAiProvider(): boolean {
+  return configuredProviders().length > 0;
+}
+
 const SYSTEM_PROMPT =
   "You are Cartograph's evidence-bound architecture guide. You help developers understand an unfamiliar codebase from static-analysis evidence. Return only valid JSON matching the requested shape. Never invent file IDs, citations, or figures.";
 
