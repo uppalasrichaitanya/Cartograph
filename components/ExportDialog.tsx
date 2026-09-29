@@ -92,12 +92,19 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [review, setReview] = useState<Review | null>(null);
+  // A review belongs to the figure it was made for (the options that shape the model).
+  const [stored, setStored] = useState<{ key: string; review: Review } | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [reviewMissing, setReviewMissing] = useState(false);
   // Bumped after a review so the preview refetches (an unknown param busts the browser cache).
   const [previewNonce, setPreviewNonce] = useState(0);
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  const figureKey = JSON.stringify([options.scope, options.preset, options.detail, options.includeTests]);
+  const figureKeyRef = useRef(figureKey);
+  useEffect(() => { figureKeyRef.current = figureKey; });
+  const review = stored && stored.key === figureKey ? stored.review : null;
 
   const update = useCallback((patch: Partial<DiagramOptions>) => {
     setOptions((current) => {
@@ -199,8 +206,9 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
   };
 
   const runReview = async (refresh = false) => {
+    const key = figureKey;
     setReviewing(true);
-    setError(null);
+    setReviewError(null);
     try {
       const response = await fetch(`/api/diagram/${analysisId}/review?${diagramQuery(options, "svg")}`, {
         method: "POST",
@@ -209,11 +217,13 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
       });
       const body = (await response.json()) as Review & { error?: string };
       if (!response.ok) throw new Error(body.error ?? "AI review failed.");
-      setReview(body);
+      // The options changed while this was in flight: it describes another figure.
+      if (key !== figureKeyRef.current) return;
+      setStored({ key, review: body });
       if (options.annotations !== "measured+ai") update({ annotations: "measured+ai" });
       setPreviewNonce((n) => n + 1);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "AI review failed.");
+      if (key === figureKeyRef.current) setReviewError(caught instanceof Error ? caught.message : "AI review failed.");
     } finally {
       setReviewing(false);
     }
@@ -261,15 +271,16 @@ export function ExportDialog({ analysisId, repoName, region, aiConfigured, onClo
             >
               {reviewing ? "Reviewing..." : review ? "Regenerate AI review" : "Review with AI"}
             </button>
+            {reviewError && <p className="export-error" role="alert">{reviewError}</p>}
             {reviewMissing && !review && <p className="export-hint">Run the AI review to add captions and notes to this figure.</p>}
             {review && (
               <div className="assisted-note export-review-body">
                 {review.summary && <p className="export-review-summary">{review.summary}</p>}
                 <ol className="export-review-notes">
-                  {review.notes.map((note) => (
-                    <li key={note.text}>
+                  {review.notes.map((note, index) => (
+                    <li key={index + note.text}>
                       <span className="export-ai-tag">AI</span> {note.text}
-                      <span className="export-review-subjects">{note.subjects.map((id) => id.replace(/\b[a-z]:/g, "").replace("->", " → ")).join(" · ")}</span>
+                      <span className="export-review-subjects">{note.subjects.map((id) => id.split("->").map((part) => part.replace(/^([a-z]:)+/, "")).join(" → ")).join(" · ")}</span>
                     </li>
                   ))}
                 </ol>
