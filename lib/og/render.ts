@@ -12,7 +12,8 @@ import { Resvg } from "@resvg/resvg-js";
 import { renderDiagram } from "@/lib/diagram";
 import { defaultDiagramOptions } from "@/lib/diagram/options";
 import type { AnalysisResult } from "@/types/graph";
-import { composeOgCard, OG_WIDTH } from "./card";
+import { buildDiagramModel } from "@/lib/diagram/model";
+import { composeOgCard, composeSummaryCard, OG_WIDTH, usesSummaryCard } from "./card";
 
 /** Must also be listed in next.config.ts outputFileTracingIncludes for /api/og/** (a test checks), or Vercel will not ship them. */
 export const OG_FONT_FILES = [
@@ -35,11 +36,25 @@ export function rasterizeCard(cardSvg: string): Uint8Array {
 }
 
 /**
- * A Slide-preset, light-theme, measured-only figure on the card, as PNG.
+ * A Slide-preset, light-theme, measured-only figure on the card, as PNG. A
+ * repository with fewer than three units gets a summary card instead (name,
+ * stats, tagline), with the small figure below when it stays legible.
  * Keep annotations "measured": AI captions need Plex Sans italic, which is not bundled.
  */
 export async function renderOgPng(result: AnalysisResult, origin: string): Promise<Uint8Array> {
-  const options = { ...defaultDiagramOptions("slide"), annotations: "measured" as const };
-  const figure = await renderDiagram(result, options, "svg", { origin, embedFonts: false });
+  const measured = { annotations: "measured" as const };
+  const context = { origin, embedFonts: false };
+  const slide = { ...defaultDiagramOptions("slide"), ...measured };
+  if (usesSummaryCard(buildDiagramModel(result, slide).units.length)) {
+    const meta = result.repoMeta;
+    // The slide canvas is a fixed 1920x1080, mostly empty for one or two boxes;
+    // the document preset hugs its content, so it stays large enough to read.
+    const compact = await renderDiagram(result, { ...defaultDiagramOptions("document"), ...measured }, "svg", context);
+    return rasterizeCard(composeSummaryCard(
+      { repoName: meta.repoName, files: meta.fileCount, imports: meta.dependencyCount, language: meta.language ?? "" },
+      compact.body,
+    ));
+  }
+  const figure = await renderDiagram(result, slide, "svg", context);
   return rasterizeCard(composeOgCard(figure.body));
 }

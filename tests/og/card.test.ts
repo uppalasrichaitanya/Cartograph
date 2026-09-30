@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { composeOgCard } from "@/lib/og/card";
+import { composeOgCard, composeSummaryCard, usesSummaryCard } from "@/lib/og/card";
 import { THEMES } from "@/lib/diagram/theme";
 
 const figure = (w: number, h: number) =>
@@ -28,4 +28,44 @@ test("a wide figure is letterboxed top and bottom instead", () => {
 
 test("something that is not an SVG is refused", () => {
   assert.throws(() => composeOgCard("<html></html>"), /not an SVG/);
+});
+
+const summaryInput = { repoName: "tiny", files: 3, imports: 2, language: "TypeScript" };
+
+test("the summary card is 1200 by 630 paper with wordmark, name, stats and tagline", () => {
+  const svg = composeSummaryCard(summaryInput, figure(1920, 1080));
+  assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="1200" height="630" viewBox="0 0 1200 630">/);
+  assert.match(svg, new RegExp(`<rect width="1200" height="630" fill="${THEMES.light.ground}"/>`));
+  for (const part of ["CARTOGRAPH", ">tiny<", "3 files", "2 imports", "TypeScript", "Every edge is read from an import statement."]) {
+    assert.ok(svg.includes(part), `missing ${part}`);
+  }
+});
+
+test("the summary card escapes a hostile repository name", () => {
+  const svg = composeSummaryCard({ ...summaryInput, repoName: `a<&">b` }, null);
+  assert.ok(svg.includes("a&lt;&amp;&quot;&gt;b"));
+  assert.ok(!svg.includes(`a<&">b`));
+});
+
+test("a long repository name shrinks then truncates with an ellipsis", () => {
+  const svg = composeSummaryCard({ ...summaryInput, repoName: "x".repeat(200) }, null);
+  assert.match(svg, />x+…</);
+});
+
+test("singular stats read naturally and a missing language is left out", () => {
+  const svg = composeSummaryCard({ repoName: "one", files: 1, imports: 1, language: "" }, null);
+  assert.ok(svg.includes("1 file ·"));
+  assert.ok(svg.includes("1 import"));
+  assert.ok(!svg.includes("1 imports"));
+});
+
+test("the summary is chosen below three units and the figure at three or more", () => {
+  assert.equal(usesSummaryCard(0), true);
+  assert.equal(usesSummaryCard(2), true);
+  assert.equal(usesSummaryCard(3), false);
+});
+
+test("the figure is placed below only when it stays legible", () => {
+  assert.ok(composeSummaryCard(summaryInput, figure(1000, 150)).includes('viewBox="0 0 1000 150"'));
+  assert.ok(!composeSummaryCard(summaryInput, figure(1920, 1080)).includes('viewBox="0 0 1920 1080"'));
 });
