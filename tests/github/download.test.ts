@@ -258,3 +258,27 @@ test("a network failure becomes a friendly error", async () => {
     );
   });
 });
+
+test("a local write failure is reported as such, not as a GitHub outage", async () => {
+  await withDir(async (dir) => {
+    const { fetchImpl } = scripted([new Response(new Uint8Array([1, 2]))]);
+    await assert.rejects(
+      downloadGithubArchive(source, path.join(dir, "missing-dir", "a.zip"), { fetchImpl }),
+      rejectsWith(/Couldn't save the downloaded archive/),
+    );
+  });
+});
+
+test("redirect and 404 response bodies are cancelled", async () => {
+  await withDir(async (dir) => {
+    let cancelled = 0;
+    const tracked = (status: number, headers: Record<string, string> = {}) => () =>
+      new Response(new ReadableStream({ cancel() { cancelled += 1; } }), { status, headers });
+    const { fetchImpl } = scripted([
+      tracked(302, { location: "https://codeload.github.com/x" }),
+      tracked(404),
+    ]);
+    await assert.rejects(downloadGithubArchive(source, path.join(dir, "a.zip"), { fetchImpl }), rejectsWith(/Couldn't find/));
+    assert.equal(cancelled, 2);
+  });
+});

@@ -58,6 +58,8 @@ export type AnalysisOptions =
 /** Injection points for tests; production uses the defaults. */
 export type AnalysisDeps = {
   downloadGithubArchive?: typeof downloadGithubArchive;
+  /** Aborts an in-flight GitHub download, e.g. when the client cancels. */
+  signal?: AbortSignal;
 };
 
 export async function analyzeRepository(
@@ -105,7 +107,7 @@ export async function analyzeRepository(
       // removes it with everything else; there is no stored upload to delete.
       localZipPath = path.join(temporaryDirectory, "github.zip");
       const download = deps.downloadGithubArchive ?? downloadGithubArchive;
-      const { bytes } = await download(github, localZipPath);
+      const { bytes } = await download(github, localZipPath, { signal: deps.signal });
       repoSizeBytes = bytes;
     } else if (zipPath!.startsWith("http://") || zipPath!.startsWith("https://")) {
       await report("validating", "Downloading the archive from storage");

@@ -37,6 +37,7 @@ export async function POST(request: Request): Promise<Response> {
         async (phase, detail) => {
           await writer.write(encodeEvent({ type: "progress", phase, detail }));
         },
+        { signal: request.signal },
       );
       await writer.write(encodeEvent({
         type: "result",

@@ -144,7 +144,11 @@ export async function downloadGithubArchive(
       throw error;
     }
 
-    await writeFile(destinationPath, Buffer.concat(chunks));
+    try {
+      await writeFile(destinationPath, Buffer.concat(chunks));
+    } catch {
+      throw new GithubImportError("Couldn't save the downloaded archive.");
+    }
     return { bytes };
   } catch (error) {
     if (error instanceof GithubImportError) throw error;

@@ -106,3 +106,23 @@ test("zip imports record no source", async () => {
   const meta = await detectRepoMeta(process.cwd(), { nodes: [], edges: [] } as never, [], "x", null);
   assert.equal("source" in meta, false);
 });
+
+test("the caller's abort signal reaches the GitHub download", async () => {
+  const controller = new AbortController();
+  let received: AbortSignal | undefined;
+  await assert.rejects(
+    analyzeRepository(
+      { github: { owner: "octo", repo: "cat", ref: null }, retention: "7d" },
+      () => {},
+      {
+        signal: controller.signal,
+        downloadGithubArchive: async (_source, _destination, options) => {
+          received = options?.signal;
+          throw new Error("stop here");
+        },
+      },
+    ),
+    /stop here/,
+  );
+  assert.equal(received, controller.signal);
+});
