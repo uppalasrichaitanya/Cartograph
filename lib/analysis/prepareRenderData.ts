@@ -1,5 +1,5 @@
 import path from "node:path";
-import ELK from "elkjs/lib/elk.bundled.js";
+import ELK, { type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import {
   collectUnresolvedImports,
   edgeConfidenceFromSource,
@@ -94,7 +94,7 @@ async function layout(
     const positioned = new Map((result.children ?? []).map((node) => [node.id, node]));
     const routes = new Map<string, Pt[]>();
     if (routed) {
-      for (const elkEdge of result.edges ?? []) {
+      for (const elkEdge of (result.edges ?? []) as ElkExtendedEdge[]) {
         const section = elkEdge.sections?.[0];
         if (!section) continue;
         // The graph is flat, so the container is the root; honour a nested

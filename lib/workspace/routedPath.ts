@@ -12,7 +12,9 @@
  * @module lib/workspace/routedPath
  */
 import { roundedPath } from "@/lib/diagram/geometry";
-import type { Point } from "@/lib/diagram/types";
+import type { Point as ReadonlyPoint } from "@/lib/diagram/types";
+
+type Point = { -readonly [K in keyof ReadonlyPoint]: ReadonlyPoint[K] };
 
 /** How far a handle may sit from the route's end point before the route is stale. */
 const SNAP_TOLERANCE = 8;
@@ -30,7 +32,7 @@ function follow(points: Point[], endIndex: number, neighbourIndex: number, origi
 }
 
 /** Drop repeated points and points that lie on a straight run between their neighbours. */
-function simplify(points: ReadonlyArray<Point>): Point[] {
+function simplify(points: ReadonlyArray<ReadonlyPoint>): Point[] {
   const out: Point[] = [];
   for (const point of points) {
     const last = out[out.length - 1];
@@ -53,9 +55,9 @@ function simplify(points: ReadonlyArray<Point>): Point[] {
  *   more than 8px from the route's end point (a dragged node).
  */
 export function routedEdgePath(
-  route: ReadonlyArray<Point>,
-  source: Point,
-  target: Point,
+  route: ReadonlyArray<ReadonlyPoint>,
+  source: ReadonlyPoint,
+  target: ReadonlyPoint,
   radius = 8,
 ): string | null {
   if (route.length < 2) return null;
