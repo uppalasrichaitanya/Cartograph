@@ -1,10 +1,22 @@
+import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { DiagramView } from "@/components/DiagramView";
 import { hasAiProvider } from "@/lib/ai/provider";
+import { metadataFor } from "@/lib/og/metadata";
 import { getStorage } from "@/lib/storage";
 import { loadLiveAnalysis } from "@/lib/storage/live";
 
 export const dynamic = "force-dynamic";
+
+/** One storage read per request, shared by the page and its metadata. */
+const loadAnalysis = cache(async (id: string) => loadLiveAnalysis(getStorage(), id));
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  // The page itself answers a missing or unreadable analysis; metadata must not throw.
+  return metadataFor(id, loadAnalysis);
+}
 
 export default async function RepositoryPage({
   params,
@@ -25,7 +37,7 @@ export default async function RepositoryPage({
   }
   let result;
   try {
-    result = await loadLiveAnalysis(getStorage(), id);
+    result = await loadAnalysis(id);
   } catch {
     notFound();
   }

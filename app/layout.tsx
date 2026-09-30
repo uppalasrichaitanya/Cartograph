@@ -7,6 +7,7 @@ import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
 import "@fontsource/ibm-plex-mono/latin-600.css";
 import "./globals.css";
+import { metadataBaseUrl } from "@/lib/og/metadata";
 
 /**
  * Two faces, and only two.
@@ -29,9 +30,16 @@ import "./globals.css";
  * production builds and page loads do not depend on a third-party service.
  */
 
+const TITLE = "Cartograph — Codebase architecture, verified";
+const DESCRIPTION = "Generate an interactive architecture diagram from a JavaScript, TypeScript, Python, or Go repository.";
+const DEFAULT_IMAGE = { url: "/og-default.png", width: 1200, height: 630, alt: "Cartograph's own architecture map" };
+
 export const metadata: Metadata = {
-  title: "Cartograph — Codebase architecture, verified",
-  description: "Generate an interactive architecture diagram from a JavaScript, TypeScript, or Python repository.",
+  metadataBase: metadataBaseUrl(),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: { title: TITLE, description: DESCRIPTION, type: "website", siteName: "Cartograph", images: [DEFAULT_IMAGE] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: [DEFAULT_IMAGE.url] },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
