@@ -117,3 +117,32 @@ test("region-view edges are not routed", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+const file = (id: string) => ({ id, path: id, folder: "r", lineCount: 1, imports: [], externalImports: [] });
+
+test("a self-edge gets no route while its neighbours do", async () => {
+  const graph = {
+    nodes: [file("a.ts"), file("b.ts")],
+    edges: [
+      { id: "a-a", from: "a.ts", to: "a.ts" },
+      { id: "a-b", from: "a.ts", to: "b.ts" },
+    ],
+  };
+  const data = await prepareRenderData(graph, [{ name: "r", fileIds: ["a.ts", "b.ts"] }], null, []);
+  const edges = data.fileViewByFolder["r"].edges;
+  assert.equal(edges.find((e) => e.id === "a-a")!.route, undefined);
+  assert.ok(edges.find((e) => e.id === "a-b")!.route);
+});
+
+test("when ELK fails, nodes fall back to the grid and edges carry no routes", async () => {
+  // An edge to a file that is in the region but has no node makes ELK throw.
+  const graph = {
+    nodes: [file("a.ts")],
+    edges: [{ id: "a-ghost", from: "a.ts", to: "ghost.ts" }],
+  };
+  const data = await prepareRenderData(graph, [{ name: "r", fileIds: ["a.ts", "ghost.ts"] }], null, []);
+  const view = data.fileViewByFolder["r"];
+  assert.deepEqual(view.nodes[0].position, { x: 0, y: 0 });
+  assert.equal(view.edges.length, 1);
+  assert.equal(view.edges[0].route, undefined);
+});

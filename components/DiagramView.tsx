@@ -225,7 +225,7 @@ function graphToFlow(
         ? { ...node.data, sizeShare: regionSizeShare(node.data.fileIds?.length ?? 0, maxFiles) }
         : node.data,
     })),
-    edges: graph.edges.map((edge) => {
+    edges: graph.edges.map(({ route, ...edge }) => {
       const confidence = edge.confidence ?? "derived";
       const count = counts?.get(edge.id);
       const baseWidth = count ? edgeStrokeWidth(count) : 1.4;
@@ -233,7 +233,7 @@ function graphToFlow(
         ...edge,
         // Region arrows are few and weighted; bezier curves keep parallel
         // arrows apart instead of sharing one orthogonal trunk.
-        type: counts ? "default" : edge.route ? "routed" : "smoothstep",
+        type: counts ? "default" : route ? "routed" : "smoothstep",
         // An arrowhead asserts arrival at a known target. An unresolved
         // import has no known target, so it gets none.
         ...(confidence === "unknown"
@@ -246,7 +246,12 @@ function graphToFlow(
         className: `confidence-${confidence}`,
         // Kept in data so the highlight effect can recompute styling from
         // confidence instead of overwriting it.
-        data: { confidence, count, baseWidth, ...(!counts && edge.route ? { route: edge.route } : {}) },
+        data: {
+          confidence,
+          count,
+          baseWidth,
+          ...(!counts && route ? { route } : {}),
+        },
         style: { strokeWidth: baseWidth, opacity: edgeRestOpacity(confidence) },
       };
     }),
