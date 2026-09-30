@@ -45,7 +45,7 @@ test("RedisStore sends the script with hashed KEYS and the time and limits as AR
   assert.equal((await store.consume("203.0.113.9", [rule], 1_000)).ok, true);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].script, RATE_LIMIT_SCRIPT);
-  assert.deepEqual(calls[0].keys, [`rl:test:${hash("203.0.113.9")}`]);
+  assert.deepEqual(calls[0].keys, [`rl:{${hash("203.0.113.9")}}:test`]);
   assert.ok(!calls[0].keys[0].includes("203.0.113.9"));
   assert.deepEqual(calls[0].args, [1_000, "abc", 60_000, 2]);
 });

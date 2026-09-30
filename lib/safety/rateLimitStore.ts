@@ -70,8 +70,10 @@ export class RedisStore implements RateLimitStore {
 
   async consume(key: string, rules: ReadonlyArray<RateLimitRule>, now: number = Date.now()): Promise<RateLimitDecision> {
     // Hash the client key so no raw addresses are stored in Redis.
+    // One hash tag for all of a request's buckets keeps them in one cluster slot,
+    // which a multi-key script requires if the database is ever sharded.
     const digest = createHash("sha256").update(key).digest("hex").slice(0, 16);
-    const keys = rules.map((rule) => `rl:${rule.name}:${digest}`);
+    const keys = rules.map((rule) => `rl:{${digest}}:${rule.name}`);
     const args: unknown[] = [now, (this.options.random ?? randomUUID)()];
     for (const rule of rules) args.push(rule.windowMs, rule.max);
 
