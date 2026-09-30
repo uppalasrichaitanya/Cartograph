@@ -48,6 +48,22 @@ function simplify(points: ReadonlyArray<ReadonlyPoint>): Point[] {
   });
 }
 
+/** Insert an elbow wherever consecutive points differ on both axes, keeping the previous run's direction. */
+function orthogonalize(points: ReadonlyArray<Point>): Point[] {
+  const out: Point[] = [points[0]];
+  for (let i = 1; i < points.length; i += 1) {
+    const a = out[out.length - 1];
+    const b = points[i];
+    if (!same(a.x, b.x) && !same(a.y, b.y)) {
+      const prev = out[out.length - 2];
+      const wasVertical = prev !== undefined && same(prev.x, a.x);
+      out.push(wasVertical ? { x: b.x, y: a.y } : { x: a.x, y: b.y });
+    }
+    out.push(b);
+  }
+  return out;
+}
+
 /**
  * An SVG path along `route`, anchored at `source` and `target`.
  *
@@ -60,14 +76,17 @@ export function routedEdgePath(
   target: ReadonlyPoint,
   radius = 8,
 ): string | null {
-  if (route.length < 2) return null;
-  const first = route[0];
-  const last = route[route.length - 1];
+  // Tidy the raw route first, so repeated or collinear points cannot make an
+  // end segment's direction ambiguous when the ends are moved.
+  const raw = simplify(route);
+  if (raw.length < 2) return null;
+  const first = raw[0];
+  const last = raw[raw.length - 1];
   if (Math.hypot(source.x - first.x, source.y - first.y) > SNAP_TOLERANCE) return null;
   if (Math.hypot(target.x - last.x, target.y - last.y) > SNAP_TOLERANCE) return null;
 
-  const n = route.length;
-  const points: Point[] = route.map((p) => ({ x: p.x, y: p.y }));
+  const n = raw.length;
+  const points: Point[] = raw.map((p) => ({ x: p.x, y: p.y }));
   points[0] = { x: source.x, y: source.y };
   points[n - 1] = { x: target.x, y: target.y };
 
@@ -81,9 +100,9 @@ export function routedEdgePath(
       points.splice(1, 0, { x: source.x, y: mid }, { x: target.x, y: mid });
     }
   } else {
-    follow(points, 0, 1, first, route[1]);
-    follow(points, n - 1, n - 2, last, route[n - 2]);
+    follow(points, 0, 1, first, raw[1]);
+    follow(points, n - 1, n - 2, last, raw[n - 2]);
   }
 
-  return roundedPath(simplify(points), radius);
+  return roundedPath(simplify(orthogonalize(points)), radius);
 }

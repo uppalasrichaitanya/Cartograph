@@ -80,3 +80,65 @@ test("a straight two-point route whose handles differ in y gets a vertical jog",
     assert.ok(points[i - 1][0] === points[i][0] || points[i - 1][1] === points[i][1]);
   }
 });
+
+function assertAxisAligned(d: string) {
+  const points = coords(d);
+  for (let i = 1; i < points.length; i += 1) {
+    const [a, b] = [points[i - 1], points[i]];
+    assert.ok(a[0] === b[0] || a[1] === b[1], `diagonal segment ${a} -> ${b} in ${d}`);
+  }
+}
+
+test("duplicate leading points do not leave a diagonal first segment", () => {
+  const d = routedEdgePath(
+    [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 50 }],
+    { x: 0, y: 1 },
+    { x: 100, y: 50 },
+  )!;
+  assert.ok(d);
+  assertAxisAligned(d);
+});
+
+test("a collinear 3-point route with both ends moved stays axis-aligned", () => {
+  const d = routedEdgePath(
+    [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }],
+    { x: 0, y: 2 },
+    { x: 100, y: 0 },
+  )!;
+  assert.ok(d);
+  assertAxisAligned(d);
+  assert.deepEqual(coords(d)[0], [0, 2]);
+});
+
+test("a route whose first segment is vertical follows the source x", () => {
+  const d = routedEdgePath(
+    [{ x: 10, y: 0 }, { x: 10, y: 40 }, { x: 90, y: 40 }],
+    { x: 12, y: 0 },
+    { x: 90, y: 40 },
+    0,
+  )!;
+  assertAxisAligned(d);
+  assert.equal(d, "M12 0L12 40L90 40");
+});
+
+test("a vertical two-point route with misaligned handles gets a jog", () => {
+  const d = routedEdgePath([{ x: 10, y: 0 }, { x: 10, y: 100 }], { x: 10, y: 0 }, { x: 14, y: 100 })!;
+  assertAxisAligned(d);
+});
+
+test("a back-edge loop keeps its shape with snapped ends and the default radius", () => {
+  const loop = [
+    { x: 200, y: 50 },
+    { x: 220, y: 50 },
+    { x: 220, y: 150 },
+    { x: -20, y: 150 },
+    { x: -20, y: 50 },
+    { x: 0, y: 50 },
+  ];
+  const d = routedEdgePath(loop, { x: 199.5, y: 50 }, { x: 0.5, y: 50 })!;
+  assert.ok(d);
+  assertAxisAligned(routedEdgePath(loop, { x: 199.5, y: 50 }, { x: 0.5, y: 50 }, 0)!);
+  assert.deepEqual(coords(d)[0], [199.5, 50]);
+  assert.deepEqual(coords(d).at(-1), [0.5, 50]);
+  assert.ok(d.includes("Q"), "corners are rounded");
+});
