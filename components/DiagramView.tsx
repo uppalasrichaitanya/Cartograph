@@ -1280,7 +1280,7 @@ function DiagramInner({
         </button>
 
         <div className="rail-identity">
-          <span className="rail-repo-name">{result.repoMeta.repoName}</span>
+          <span className="rail-repo-name" title={result.repoMeta.repoName}>{result.repoMeta.repoName}</span>
           {result.repoMeta.source?.kind === "github" && (
             <a
               className="rail-source-link"
