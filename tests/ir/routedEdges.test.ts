@@ -171,3 +171,36 @@ test("when ELK fails, nodes fall back to the grid and edges carry no routes", as
   assert.equal(view.edges.length, 1);
   assert.equal(view.edges[0].route, undefined);
 });
+
+test("edges between the same pair and ids containing '::' each get their own route and anchor", async () => {
+  const graph = {
+    nodes: [file("a.ts"), file("b.ts")],
+    edges: [
+      { id: "e1", from: "a.ts", to: "b.ts" },
+      { id: "e1b", from: "a.ts", to: "b.ts" },
+      { id: "x", from: "a.ts", to: "b.ts" },
+      { id: "x::s", from: "a.ts", to: "b.ts" },
+    ],
+  };
+  const data = await prepareRenderData(graph, [{ name: "r", fileIds: ["a.ts", "b.ts"] }], null, []);
+  const edges = data.fileViewByFolder["r"].edges;
+  assert.equal(edges.length, 4);
+  for (const edge of edges) assert.ok(edge.route && edge.anchor, `${edge.id} routed`);
+  assert.equal(new Set(edges.map((e) => e.route!.at(-1)!.y)).size, 4, "four distinct arrival points");
+  assert.equal(new Set(edges.map((e) => e.anchor!.source)).size, 4, "four distinct departure anchors");
+});
+
+test("when ELK fails with per-edge ports, edges carry neither route nor anchor", async () => {
+  const graph = {
+    nodes: [file("a.ts"), file("b.ts")],
+    edges: [
+      { id: "a-b", from: "a.ts", to: "b.ts" },
+      { id: "a-ghost", from: "a.ts", to: "ghost.ts" },
+    ],
+  };
+  const data = await prepareRenderData(graph, [{ name: "r", fileIds: ["a.ts", "b.ts", "ghost.ts"] }], null, []);
+  for (const edge of data.fileViewByFolder["r"].edges) {
+    assert.equal(edge.route, undefined);
+    assert.equal(edge.anchor, undefined);
+  }
+});

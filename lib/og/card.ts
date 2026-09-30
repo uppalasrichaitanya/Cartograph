@@ -69,23 +69,42 @@ const text = (value: string) => esc(latin(value));
 const MARGIN = 72;
 const NAME_MAX_WIDTH = OG_WIDTH - 2 * MARGIN;
 const NAME_SIZES = [88, 72, 60, 48];
-/** Plex Sans SemiBold averages a little under 0.58 em per character; err wide so nothing clips. */
-const NAME_ADVANCE = 0.58;
 const FIGURE_BAND = { x: MARGIN, y: 396, width: OG_WIDTH - 2 * MARGIN, height: 190 };
 /** Below this scale the figure's own text is too small to read on a card. */
 const MIN_FIGURE_SCALE = 0.7;
 /** With no figure below, the text block moves down to sit in the middle of the card. */
 const CENTRED_SHIFT = 80;
 
+/**
+ * A deliberately wide estimate of a Plex Sans SemiBold glyph's advance, in em,
+ * so a fitted name never crosses the margin. Tiers come from measuring the
+ * bundled face with resvg: W, m and @ are about 0.9 em, M and w 0.8, other
+ * capitals up to 0.7, narrow letters and punctuation under 0.4, the rest ~0.6.
+ */
+function glyphAdvance(char: string): number {
+  if (/[Wm@]/.test(char)) return 1;
+  if (/[Mw]/.test(char)) return 0.85;
+  if (/[A-Z]/.test(char)) return 0.75;
+  if (/[Iiljtfr.,:;'!|\-\s]/.test(char)) return 0.4;
+  return 0.6;
+}
+
+const nameWidth = (chars: ReadonlyArray<string>, size: number) =>
+  chars.reduce((sum, char) => sum + glyphAdvance(char), 0) * size;
+
 /** The repo name at the largest size that fits, ellipsised when even the smallest does not. */
 function fitName(name: string): { text: string; size: number } {
   const chars = [...latin(name)];
   for (const size of NAME_SIZES) {
-    if (chars.length * size * NAME_ADVANCE <= NAME_MAX_WIDTH) return { text: name, size };
+    if (nameWidth(chars, size) <= NAME_MAX_WIDTH) return { text: name, size };
   }
   const size = NAME_SIZES[NAME_SIZES.length - 1];
-  const max = Math.max(1, Math.floor(NAME_MAX_WIDTH / (size * NAME_ADVANCE)));
-  return { text: `${chars.slice(0, max - 1).join("")}…`, size };
+  const kept: string[] = [];
+  for (const char of chars) {
+    if (nameWidth([...kept, char, "…"], size) > NAME_MAX_WIDTH) break;
+    kept.push(char);
+  }
+  return { text: `${kept.join("")}…`, size };
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

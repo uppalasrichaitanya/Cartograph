@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
-import { composeOgCard, composeSummaryCard, usesSummaryCard } from "@/lib/og/card";
+import { Resvg } from "@resvg/resvg-js";
+import { OG_FONT_FILES } from "@/lib/og/render";
+import { composeOgCard, composeSummaryCard, OG_WIDTH, usesSummaryCard } from "@/lib/og/card";
 import { THEMES } from "@/lib/diagram/theme";
 
 const figure = (w: number, h: number) =>
@@ -69,3 +72,22 @@ test("the figure is placed below only when it stays legible", () => {
   assert.ok(composeSummaryCard(summaryInput, figure(1000, 150)).includes('viewBox="0 0 1000 150"'));
   assert.ok(!composeSummaryCard(summaryInput, figure(1920, 1080)).includes('viewBox="0 0 1920 1080"'));
 });
+
+/** The right edge of everything drawn on the card, measured by resvg with the bundled fonts. */
+function rightEdge(svg: string): number {
+  const fontDir = path.join(process.cwd(), "lib", "og", "fonts");
+  // Without the full-card ground rect, which would always reach 1200.
+  const resvg = new Resvg(svg.replace(/<rect width="1200" height="630"[^>]*\/>/, ""), {
+    font: { fontFiles: OG_FONT_FILES.map((f) => path.join(fontDir, f)), loadSystemFonts: false, defaultFontFamily: "IBM Plex Sans" },
+  });
+  const box = resvg.getBBox();
+  assert.ok(box, "something was drawn");
+  return box.x + box.width;
+}
+
+for (const name of ["ABCDEFGHMNOPQRSTUVWX", "M".repeat(20), "W".repeat(37), "i".repeat(200), "Wm@".repeat(15), "slugify-like-tiny-repo"]) {
+  test(`the repository name ${name.slice(0, 12)}… (${name.length} chars) stays inside the right margin`, () => {
+    const svg = composeSummaryCard({ ...summaryInput, repoName: name }, null);
+    assert.ok(rightEdge(svg) <= OG_WIDTH - 72, `right edge ${rightEdge(svg)}`);
+  });
+}
