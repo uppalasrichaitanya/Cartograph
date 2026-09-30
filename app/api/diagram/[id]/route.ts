@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     throw error;
   }
 
-  const limited = enforceRateLimit(request, RATE_LIMITS.diagram);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.diagram);
   if (limited) return limited;
 
   const result = await loadLiveAnalysis(getStorage(), id);

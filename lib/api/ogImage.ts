@@ -23,7 +23,7 @@ export type OgImageDeps = Readonly<{
 
 export async function handleOgImage(request: Request, id: string, deps: OgImageDeps): Promise<Response> {
   if (!isValidAnalysisId(id)) return Response.json({ error: "Analysis not found." }, { status: 404 });
-  const limited = enforceRateLimit(request, RATE_LIMITS.og);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.og);
   if (limited) return limited;
 
   const result = await (deps.load ?? loadLiveAnalysis)(deps.storage, id);

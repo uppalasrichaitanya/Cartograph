@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  * analysis stream endpoint can pick it up.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  const limited = enforceRateLimit(request, RATE_LIMITS.upload);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.upload);
   if (limited) return limited as NextResponse;
   try {
     const formData = await request.formData();

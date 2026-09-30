@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { RateLimiter, clientKey, enforceRateLimit } from "../../lib/safety/rateLimit";
+import { MemoryStore } from "../../lib/safety/rateLimitStore";
 
 const rule = { name: "test", windowMs: 60_000, max: 2 };
 
@@ -40,14 +41,18 @@ test("client identity comes from the first forwarded address", () => {
 });
 
 test("enforceRateLimit returns a 429 with Retry-After once the global budget is spent", async () => {
-  const limiter = new RateLimiter(() => 0);
+  const store = new MemoryStore(new RateLimiter(() => 0));
   const global = [{ name: "global-test", windowMs: 60_000, max: 1 }];
   const from = (ip: string) => new Request("http://x", { headers: { "x-forwarded-for": ip } });
-  assert.equal(enforceRateLimit(from("1.1.1.1"), [rule], global, limiter), null);
-  const response = enforceRateLimit(from("2.2.2.2"), [rule], global, limiter);
+  assert.equal(await enforceRateLimit(from("1.1.1.1"), [rule], global, store), null);
+  const response = await enforceRateLimit(from("2.2.2.2"), [rule], global, store);
   assert.equal(response?.status, 429);
   assert.equal(response?.headers.get("Retry-After"), "60");
-  assert.match(((await response?.json()) as { error: string }).error, /lot of requests/);
+  assert.equal(response?.headers.get("Content-Type"), "application/json");
+  assert.deepEqual(await response?.json(), {
+    error: "Cartograph is handling a lot of requests right now. Try again in 60s.",
+    retryAfterSeconds: 60,
+  });
 });
 
 test("diagram exports have their own budget", async () => {
