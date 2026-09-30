@@ -37,11 +37,13 @@ const round1 = (value: number) => Math.round(value * 10) / 10;
 /**
  * Lay the nodes out with ELK.
  *
- * With `routed`, every node gets a west input port and an east output port at
- * the vertical middle of its box, edges attach to those ports, and ELK's
- * orthogonal routes come back on the edges as `route`. The client draws the
- * route (see lib/workspace/routedPath.ts) instead of guessing a path between
- * handles. Region arrows are deliberately not routed: they are few, weighted
+ * With `routed`, every edge end gets a port of its own: `<edge>::s` on the
+ * source's east side and `<edge>::t` on the target's west side, spread along
+ * the side by ELK (a lone port stays centred). ELK's orthogonal routes come
+ * back on the edges as `route`, with `anchor` giving each end's vertical offset
+ * from its node's middle, so arrows into one box arrive separately. The client
+ * draws the route (see lib/workspace/routedPath.ts) instead of guessing a path
+ * between handles. Region arrows are deliberately not routed: they are few, weighted
  * beziers.
  */
 async function layout(
@@ -68,6 +70,8 @@ async function layout(
               "elk.spacing.edgeEdge": "12",
               "elk.layered.spacing.edgeEdgeBetweenLayers": "12",
               "elk.layered.spacing.edgeNodeBetweenLayers": "20",
+              "elk.spacing.portPort": "10",
+              "elk.portAlignment.default": "CENTER",
             }
           : {}),
       },
@@ -77,18 +81,22 @@ async function layout(
         height: node.height,
         ...(routed
           ? {
-              layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+              layoutOptions: { "elk.portConstraints": "FIXED_SIDE" },
               ports: [
-                { id: `${node.id}::in`, x: 0, y: node.height / 2, width: 0, height: 0, layoutOptions: { "elk.port.side": "WEST" } },
-                { id: `${node.id}::out`, x: node.width, y: node.height / 2, width: 0, height: 0, layoutOptions: { "elk.port.side": "EAST" } },
+                ...routable
+                  .filter((edge) => edge.source === node.id)
+                  .map((edge) => ({ id: `${edge.id}::s`, width: 0, height: 0, layoutOptions: { "elk.port.side": "EAST" } })),
+                ...routable
+                  .filter((edge) => edge.target === node.id)
+                  .map((edge) => ({ id: `${edge.id}::t`, width: 0, height: 0, layoutOptions: { "elk.port.side": "WEST" } })),
               ],
             }
           : {}),
       })),
       edges: routable.map((edge) => ({
         id: edge.id,
-        sources: [routed ? `${edge.source}::out` : edge.source],
-        targets: [routed ? `${edge.target}::in` : edge.target],
+        sources: [routed ? `${edge.id}::s` : edge.source],
+        targets: [routed ? `${edge.id}::t` : edge.target],
       })),
     });
     const positioned = new Map((result.children ?? []).map((node) => [node.id, node]));
@@ -125,7 +133,22 @@ async function layout(
         };
       }),
       edges: routed
-        ? edges.map((edge) => (routes.has(edge.id) ? { ...edge, route: routes.get(edge.id) } : edge))
+        ? edges.map((edge) => {
+            const route = routes.get(edge.id);
+            if (!route) return edge;
+            const centre = (id: string) => {
+              const node = positioned.get(id);
+              return (node?.y ?? 0) + (node?.height ?? 0) / 2;
+            };
+            return {
+              ...edge,
+              route,
+              anchor: {
+                source: round1(route[0].y - centre(edge.source)) || 0,
+                target: round1(route[route.length - 1].y - centre(edge.target)) || 0,
+              },
+            };
+          })
         : edges,
     };
   } catch {

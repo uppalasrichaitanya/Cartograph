@@ -1529,6 +1529,10 @@ h1, h2, h3, p { margin-top: 0; }
   min-width: 0 !important;
   min-height: 0 !important;
 }
+/* Routed file views give every arrow its own port along the box's side, so the
+ * one dot at the vertical middle would point at nothing. Hidden, not removed:
+ * the handles stay in place and functional. */
+.map-region.has-routed-edges .node-handle { opacity: 0 !important; }
 /* The subject's own attachment points take the accent, so a selected node's
  * connections are visible as belonging to it. */
 .react-flow__node.is-selected .node-handle,
