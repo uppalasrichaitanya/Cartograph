@@ -90,7 +90,7 @@ export const RATE_LIMITS = {
     { name: "diagram-day", windowMs: 24 * 60 * MINUTE, max: 300 },
   ],
   og: [
-    { name: "og-minute", windowMs: MINUTE, max: 60 },
+    { name: "og-minute", windowMs: MINUTE, max: 120 },
     { name: "og-day", windowMs: 24 * 60 * MINUTE, max: 1000 },
   ],
   upload: [{ name: "upload-10min", windowMs: 10 * MINUTE, max: 10 }],

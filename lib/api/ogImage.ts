@@ -12,6 +12,9 @@ import { isValidAnalysisId } from "@/lib/storage/interface";
 import { loadLiveAnalysis } from "@/lib/storage/live";
 import type { AnalysisResult } from "@/types/graph";
 
+// Deterministic output, but deletion must take effect within the hour.
+const CACHE_CONTROL = "public, max-age=300, s-maxage=3600";
+
 export type OgImageDeps = Readonly<{
   storage: StorageBackend;
   load?: (storage: StorageBackend, id: string) => Promise<AnalysisResult | null>;
@@ -33,13 +36,13 @@ export async function handleOgImage(request: Request, id: string, deps: OgImageD
   } catch (error) {
     // An empty model or unrenderable figure still deserves a preview.
     if (!(error instanceof DiagramScopeError)) console.error("og render failed", error);
-    return Response.redirect(new URL("/og-default.png", origin), 307);
+    // Cached like the PNG, so a bad link hit by a burst of unfurlers renders once.
+    return new Response(null, { status: 307, headers: { Location: new URL("/og-default.png", origin).href, "Cache-Control": CACHE_CONTROL } });
   }
   return new Response(Buffer.from(png), {
     headers: {
       "Content-Type": "image/png",
-      // Deterministic output, but deletion must take effect within the hour.
-      "Cache-Control": "public, max-age=300, s-maxage=3600",
+      "Cache-Control": CACHE_CONTROL,
       "X-Content-Type-Options": "nosniff",
     },
   });

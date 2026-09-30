@@ -3,7 +3,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import { DiagramView } from "@/components/DiagramView";
 import { hasAiProvider } from "@/lib/ai/provider";
-import { repoMetadata } from "@/lib/og/metadata";
+import { metadataFor } from "@/lib/og/metadata";
 import { getStorage } from "@/lib/storage";
 import { loadLiveAnalysis } from "@/lib/storage/live";
 
@@ -13,14 +13,9 @@ export const dynamic = "force-dynamic";
 const loadAnalysis = cache(async (id: string) => loadLiveAnalysis(getStorage(), id));
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  try {
-    const { id } = await params;
-    const result = await loadAnalysis(id);
-    return result ? repoMetadata(result, id) : {};
-  } catch {
-    // The page itself answers a missing or unreadable analysis; metadata must not throw.
-    return {};
-  }
+  const { id } = await params;
+  // The page itself answers a missing or unreadable analysis; metadata must not throw.
+  return metadataFor(id, loadAnalysis);
 }
 
 export default async function RepositoryPage({

@@ -44,12 +44,25 @@ test("a render failure redirects to the default card", async () => {
     const response = await handleOgImage(request(), ID, deps({ render: async () => { throw error; } }));
     assert.equal(response.status, 307);
     assert.equal(response.headers.get("location"), "https://cartograph.test/og-default.png");
+    assert.equal(response.headers.get("cache-control"), "public, max-age=300, s-maxage=3600");
   }
 });
 
 test("the route is rate limited", async () => {
   const same = () => new Request(`https://cartograph.test/api/og/${ID}`, { headers: { "x-forwarded-for": "10.9.9.9" } });
   let last = 200;
-  for (let i = 0; i < 61; i += 1) last = (await handleOgImage(same(), ID, deps())).status;
+  for (let i = 0; i < 121; i += 1) last = (await handleOgImage(same(), ID, deps())).status;
   assert.equal(last, 429);
+});
+
+test("a really expired analysis flows through loadLiveAnalysis to a 404", async () => {
+  let deleted = 0;
+  const storage = {
+    loadAnalysis: async () => ({ id: ID, retention: { expiresAt: "2020-01-01T00:00:00.000Z" } }) as AnalysisResult,
+    deleteAnalysis: async () => { deleted += 1; },
+  } as unknown as StorageBackend;
+  const response = await handleOgImage(request(), ID, { storage, render: async () => PNG });
+  assert.equal(response.status, 404);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(deleted, 1);
 });

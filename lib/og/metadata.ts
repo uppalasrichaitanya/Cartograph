@@ -25,6 +25,16 @@ export function metadataBaseUrl(env: Readonly<Record<string, string | undefined>
   return new URL(LOCAL_ORIGIN);
 }
 
+/** Metadata for a repo page; anything but a live analysis (missing, expired, throwing) gets the site defaults. */
+export async function metadataFor(id: string, load: (id: string) => Promise<AnalysisResult | null>): Promise<Metadata> {
+  try {
+    const result = await load(id);
+    return result ? repoMetadata(result, id) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function repoMetadata(result: AnalysisResult, id: string): Metadata {
   const { repoName, fileCount, folderCount, dependencyCount } = result.repoMeta;
   const title = `${repoName} · architecture map · Cartograph`;

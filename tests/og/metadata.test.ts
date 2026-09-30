@@ -26,3 +26,10 @@ test("the metadata base follows the deployment, and never throws without env", (
   assert.equal(metadataBaseUrl({ VERCEL_ENV: "preview", VERCEL_PROJECT_PRODUCTION_URL: "cartograph.app", VERCEL_URL: "x-abc.vercel.app" }).href, "https://x-abc.vercel.app/");
   assert.equal(metadataBaseUrl({ VERCEL_URL: "not a host!" }).href, "http://localhost:3000/");
 });
+
+test("metadataFor falls back to defaults for a missing analysis or a throwing load", async () => {
+  const { metadataFor } = await import("@/lib/og/metadata");
+  assert.deepEqual(await metadataFor(ID, async () => null), {});
+  assert.deepEqual(await metadataFor(ID, async () => { throw new Error("storage down"); }), {});
+  assert.equal((await metadataFor(ID, async () => webApp())).title, "fixture · architecture map · Cartograph");
+});

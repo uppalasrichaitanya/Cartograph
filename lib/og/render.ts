@@ -14,7 +14,7 @@ import { defaultDiagramOptions } from "@/lib/diagram/options";
 import type { AnalysisResult } from "@/types/graph";
 import { composeOgCard, OG_WIDTH } from "./card";
 
-/** Kept literal (not built with path.join) so file tracing can see the directory. */
+/** Must also be listed in next.config.ts outputFileTracingIncludes for /api/og/** (a test checks), or Vercel will not ship them. */
 export const OG_FONT_FILES = [
   "IBMPlexMono-Regular.ttf",
   "IBMPlexMono-SemiBold.ttf",
@@ -34,7 +34,10 @@ export function rasterizeCard(cardSvg: string): Uint8Array {
   return resvg.render().asPng();
 }
 
-/** A Slide-preset, light-theme, measured-only figure on the card, as PNG. */
+/**
+ * A Slide-preset, light-theme, measured-only figure on the card, as PNG.
+ * Keep annotations "measured": AI captions need Plex Sans italic, which is not bundled.
+ */
 export async function renderOgPng(result: AnalysisResult, origin: string): Promise<Uint8Array> {
   const options = { ...defaultDiagramOptions("slide"), annotations: "measured" as const };
   const figure = await renderDiagram(result, options, "svg", { origin, embedFonts: false });

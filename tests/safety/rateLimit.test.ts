@@ -57,5 +57,5 @@ test("diagram exports have their own budget", async () => {
 
 test("link-preview images have a generous budget, since every unfurl fetches one", async () => {
   const { RATE_LIMITS } = await import("@/lib/safety/rateLimit");
-  assert.deepEqual(RATE_LIMITS.og.map((rule) => [rule.name, rule.max]), [["og-minute", 60], ["og-day", 1000]]);
+  assert.deepEqual(RATE_LIMITS.og.map((rule) => [rule.name, rule.max]), [["og-minute", 120], ["og-day", 1000]]);
 });
