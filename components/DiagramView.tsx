@@ -26,6 +26,7 @@ import type {
   RenderGraph,
   RenderNodeData,
 } from "@/types/graph";
+import { RoutedEdge } from "./RoutedEdge";
 import { fileEvidence } from "@/lib/analysis/projectConfidence";
 import { createGraphQuery } from "@/lib/analysis/query";
 import {
@@ -154,6 +155,8 @@ function ArchitectureNode({ data }: NodeProps<FlowNode>) {
 }
 
 const nodeTypes = { architecture: ArchitectureNode };
+// Module scope: React Flow warns and re-mounts edges if this identity changes.
+const edgeTypes = { routed: RoutedEdge };
 
 /**
  * Base opacity for an edge at rest, by confidence.
@@ -230,7 +233,7 @@ function graphToFlow(
         ...edge,
         // Region arrows are few and weighted; bezier curves keep parallel
         // arrows apart instead of sharing one orthogonal trunk.
-        type: counts ? "default" : "smoothstep",
+        type: counts ? "default" : edge.route ? "routed" : "smoothstep",
         // An arrowhead asserts arrival at a known target. An unresolved
         // import has no known target, so it gets none.
         ...(confidence === "unknown"
@@ -243,7 +246,7 @@ function graphToFlow(
         className: `confidence-${confidence}`,
         // Kept in data so the highlight effect can recompute styling from
         // confidence instead of overwriting it.
-        data: { confidence, count, baseWidth },
+        data: { confidence, count, baseWidth, ...(!counts && edge.route ? { route: edge.route } : {}) },
         style: { strokeWidth: baseWidth, opacity: edgeRestOpacity(confidence) },
       };
     }),
@@ -1396,6 +1399,7 @@ function DiagramInner({
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}

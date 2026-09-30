@@ -62,6 +62,9 @@ test("upload → map → AI → export → delete", async ({ page }) => {
     expect(box.bottom).toBeLessThanOrEqual(viewport.height + 1);
   }
 
+  // A region's file view draws ELK-routed edges, not smoothstep guesses.
+  await expect(page.locator(".react-flow__edge-routed").first()).toBeAttached();
+
   // 5. AI panel: "not configured" without keys, then a mocked grounded answer.
   await page.getByRole("button", { name: /AI explain/ }).click();
   const panel = page.locator(".ai-panel");
