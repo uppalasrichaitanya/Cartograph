@@ -1288,7 +1288,18 @@ function DiagramInner({
         </button>
 
         <div className="rail-identity">
-          <span className="rail-repo-name">{result.repoMeta.repoName}</span>
+          <span className="rail-repo-name" title={result.repoMeta.repoName}>{result.repoMeta.repoName}</span>
+          {result.repoMeta.source?.kind === "github" && (
+            <a
+              className="rail-source-link"
+              href={result.repoMeta.source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open ${result.repoMeta.repoName} on GitHub (opens in a new tab)`}
+            >
+              GitHub ↗
+            </a>
+          )}
           <span className="rail-repo-meta">
             {result.graph.nodes.length.toLocaleString()} files ·{" "}
             {result.graph.edges.length.toLocaleString()} dependencies

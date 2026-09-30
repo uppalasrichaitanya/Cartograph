@@ -1,5 +1,5 @@
-import { analyzeRepository, type ProgressPhase } from "@/lib/analysis/analyzeRepository";
-import { parseRetention, type RetentionChoice } from "@/lib/ownership";
+import { analyzeRepository, type AnalysisOptions, type ProgressPhase } from "@/lib/analysis/analyzeRepository";
+import { AnalyzeRequestError, parseAnalyzeRequest } from "@/lib/api/analyzeRequest";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 
 export const runtime = "nodejs";
@@ -15,22 +15,14 @@ function encodeEvent(event: StreamEvent): Uint8Array {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  let zipPath: string;
-  let repoName: string | undefined;
-  let repoSizeBytes: number | undefined;
-  let retention: RetentionChoice;
+  let options: AnalysisOptions;
   try {
-    const body = (await request.json()) as { zipPath?: unknown; repoName?: unknown; repoSizeBytes?: unknown; retention?: unknown };
-    if (typeof body.zipPath !== "string") throw new Error("zipPath is required.");
-    zipPath = body.zipPath;
-    retention = parseRetention(body.retention);
-    // Both are client-supplied display metadata: bound them before they are persisted.
-    if (typeof body.repoName === "string" && body.repoName.trim()) repoName = body.repoName.trim().slice(0, 120);
-    if (typeof body.repoSizeBytes === "number" && Number.isFinite(body.repoSizeBytes) && body.repoSizeBytes >= 0) {
-      repoSizeBytes = body.repoSizeBytes;
-    }
+    options = parseAnalyzeRequest(await request.json());
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: 400 });
+    // Only our own validation messages are person-readable; a JSON parse
+    // failure gets the generic text.
+    const message = error instanceof AnalyzeRequestError ? error.message : "Invalid request.";
+    return Response.json({ error: message }, { status: 400 });
   }
 
   const limited = enforceRateLimit(request, RATE_LIMITS.analyze);
@@ -41,10 +33,11 @@ export async function POST(request: Request): Promise<Response> {
   void (async () => {
     try {
       const result = await analyzeRepository(
-        { zipPath, repoName, repoSizeBytes, retention },
+        options,
         async (phase, detail) => {
           await writer.write(encodeEvent({ type: "progress", phase, detail }));
         },
+        { signal: request.signal },
       );
       await writer.write(encodeEvent({
         type: "result",

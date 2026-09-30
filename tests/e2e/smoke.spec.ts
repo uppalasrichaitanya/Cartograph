@@ -122,3 +122,38 @@ test("upload → map → AI → export → delete", async ({ page }) => {
   const gone = await page.goto(`/repo/${id}`);
   expect(gone?.status()).toBe(404);
 });
+
+test("GitHub mode: prefill from the URL, and a bad link is explained inline", async ({ page }) => {
+  await page.goto("/");
+  // Zip is the default; the drop zone shows and the GitHub field does not.
+  await expect(page.locator('input[type="file"]')).toBeAttached();
+  await expect(page.getByLabel("Public GitHub repository")).toHaveCount(0);
+
+  // Generate with no file is never silent, and round-tripping the mode keeps no stale file.
+  await page.locator('input[type="file"]').setInputFiles({ name: "foo.zip", mimeType: "application/zip", buffer: Buffer.from("x") });
+  await expect(page.getByText("foo.zip")).toBeVisible();
+  await page.getByRole("radio", { name: "GitHub link" }).check();
+  await page.getByRole("radio", { name: "Zip file" }).check();
+  await expect(page.getByText("foo.zip")).toHaveCount(0);
+  await page.getByRole("button", { name: "Generate map" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /Choose a \.zip file/ })).toBeVisible();
+  await page.getByRole("radio", { name: "GitHub link" }).check();
+  const field = page.getByLabel("Public GitHub repository");
+  await expect(field).toBeVisible();
+  await expect(field).toHaveAttribute("placeholder", "github.com/owner/repo");
+  await expect(page.getByText(/Public repositories only · archive up to 25 MB/)).toBeVisible();
+
+  // No network in e2e: this is rejected by the shared parser before any request.
+  let requested = false;
+  page.on("request", (request) => { if (request.url().includes("/api/analyze")) requested = true; });
+  await field.fill("not a link");
+  await page.getByRole("button", { name: "Generate map" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /owner\/repo/ })).toBeVisible();
+  expect(requested).toBe(false);
+
+  // ?github= prefills GitHub mode and never submits.
+  await page.goto("/?github=octo/cat");
+  await expect(page.getByRole("radio", { name: "GitHub link" })).toBeChecked();
+  await expect(page.getByLabel("Public GitHub repository")).toHaveValue("octo/cat");
+  await expect(page.getByRole("button", { name: "Generate map" })).toBeEnabled();
+});

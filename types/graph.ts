@@ -192,6 +192,13 @@ export type RepoMeta = {
   dependencyCount: number;
   analysisTimestamp: string;
   repoSizeBytes: number | null;
+  /**
+   * Where the analysed code came from, when that is somewhere other than an
+   * uploaded zip. Set only for GitHub imports, and absent on uploads and on
+   * analyses made before GitHub import existed. `url` is the public repository
+   * page (on the branch or tag when one was pinned).
+   */
+  source?: { kind: "github"; url: string };
 };
 
 export type AnalysisResult = {
