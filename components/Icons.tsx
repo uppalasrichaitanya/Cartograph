@@ -44,20 +44,20 @@ function Glyph({ size = 16, children }: IconProps & { children: React.ReactNode 
 }
 
 /**
- * The product mark: contour lines forming a C around a survey point.
+ * The product mark: two nodes joined by one routed edge whose bowl is a C.
  *
- * The open rings read simultaneously as a cartographic contour, the initial
- * in Cartograph, and the nested boundaries of a codebase. The fixed point is
- * the known position the survey is measured from. Unlike the old triangular
- * station, the silhouette cannot be mistaken for a warning icon at small
- * sizes and remains recognisable without the wordmark.
+ * It is what the map itself draws, reduced to a single dependency: an
+ * outlined source, a filled target, and the orthogonal route between them
+ * with the same rounded corners the live map and the exports use. The route
+ * shows direction without an arrowhead, and the bowl reads as the initial in
+ * Cartograph, so the mark survives at favicon size without the wordmark.
  */
 export function MarkIcon({ size = 16 }: IconProps) {
   return (
     <Glyph size={size}>
-      <path d="M12.7 3.2A6 6 0 1 0 12.7 12.8" />
-      <path d="M11 5.6A3.15 3.15 0 1 0 11 10.4" />
-      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+      <rect x="9" y="2" width="4.5" height="4.5" rx="0.75" />
+      <rect x="9" y="9.5" width="4.5" height="4.5" rx="0.75" fill="currentColor" />
+      <path d="M9 4.25H6A3 3 0 0 0 3 7.25V8.75A3 3 0 0 0 6 11.75H9" />
     </Glyph>
   );
 }

@@ -139,8 +139,11 @@ export function composeSummaryCard(input: SummaryCardInput, figureSvg: string | 
   const dy = figure ? 0 : CENTRED_SHIFT;
   const parts = [
     `<rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="${theme.ground}"/>`,
-    `<rect x="${MARGIN}" y="${72 + dy}" width="28" height="4" fill="${theme.accent}"/>`,
-    `<text x="${MARGIN}" y="${112 + dy}" ${mono(600)} font-size="24" letter-spacing="4" fill="${theme.ink}">CARTOGRAPH</text>`,
+    // The product mark (components/Icons.tsx), drawn on its 24px grid at 30px.
+    `<g transform="translate(${MARGIN} ${88 + dy}) scale(1.25)" fill="none" stroke="${theme.accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`
+      + `<rect x="14" y="3" width="6" height="6" rx="1"/><rect x="14" y="15" width="6" height="6" rx="1" fill="${theme.accent}"/>`
+      + `<path d="M14 6H9A4 4 0 0 0 5 10V14A4 4 0 0 0 9 18H14"/></g>`,
+    `<text x="${MARGIN + 42}" y="${112 + dy}" ${mono(600)} font-size="24" letter-spacing="4" fill="${theme.ink}">CARTOGRAPH</text>`,
     `<text x="${MARGIN}" y="${(name.size > 60 ? 236 : 226) + dy}" font-family="IBM Plex Sans" font-weight="600" font-size="${name.size}" fill="${theme.ink}">${text(name.text)}</text>`,
     `<text x="${MARGIN}" y="${298 + dy}" ${mono(400)} font-size="30" fill="${theme.inkMuted}">${text(stats)}</text>`,
     `<text x="${MARGIN}" y="${352 + dy}" ${mono(400)} font-size="24" fill="${theme.inkFaint}">Every edge is read from an import statement.</text>`,
