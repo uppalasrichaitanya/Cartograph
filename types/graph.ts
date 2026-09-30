@@ -162,6 +162,15 @@ export type RenderEdge = {
    * to it continuously.
    */
   confidence?: GeometryConfidence;
+  /**
+   * ELK's orthogonal route from the source's right-middle to the target's
+   * left-middle, in the same absolute coordinates as node positions.
+   *
+   * Absent on analyses made before routing existed and on region-view edges,
+   * which are weighted beziers. The client then falls back to a smoothstep
+   * path, so no migration is needed.
+   */
+  route?: ReadonlyArray<{ x: number; y: number }>;
 };
 
 export type RenderGraph = {

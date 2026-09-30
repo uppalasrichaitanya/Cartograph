@@ -30,9 +30,29 @@ type LayoutInput = {
   node: Omit<RenderNode, "position" | "width" | "height">;
 };
 
-async function layout(nodes: LayoutInput[], edges: RenderEdge[]): Promise<RenderGraph> {
+type Pt = { x: number; y: number };
+
+const round1 = (value: number) => Math.round(value * 10) / 10;
+
+/**
+ * Lay the nodes out with ELK.
+ *
+ * With `routed`, every node gets a west input port and an east output port at
+ * the vertical middle of its box, edges attach to those ports, and ELK's
+ * orthogonal routes come back on the edges as `route`. The client draws the
+ * route (see lib/workspace/routedPath.ts) instead of guessing a path between
+ * handles. Region arrows are deliberately not routed: they are few, weighted
+ * beziers.
+ */
+async function layout(
+  nodes: LayoutInput[],
+  edges: RenderEdge[],
+  routed = false,
+): Promise<RenderGraph> {
   if (nodes.length === 0) return { nodes: [], edges: [] };
   try {
+    // A self-loop has no meaningful route to draw; keep it out of the router.
+    const routable = routed ? edges.filter((edge) => edge.source !== edge.target) : edges;
     const result = await elk.layout({
       id: "cartograph",
       layoutOptions: {
@@ -41,11 +61,56 @@ async function layout(nodes: LayoutInput[], edges: RenderEdge[]): Promise<Render
         "elk.spacing.nodeNode": "40",
         "elk.layered.spacing.nodeNodeBetweenLayers": "90",
         "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
+        ...(routed
+          ? {
+              "elk.edgeRouting": "ORTHOGONAL",
+              "elk.spacing.edgeNode": "18",
+              "elk.spacing.edgeEdge": "12",
+              "elk.layered.spacing.edgeEdgeBetweenLayers": "12",
+              "elk.layered.spacing.edgeNodeBetweenLayers": "20",
+            }
+          : {}),
       },
-      children: nodes.map((node) => ({ id: node.id, width: node.width, height: node.height })),
-      edges: edges.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
+      children: nodes.map((node) => ({
+        id: node.id,
+        width: node.width,
+        height: node.height,
+        ...(routed
+          ? {
+              layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+              ports: [
+                { id: `${node.id}::in`, x: 0, y: node.height / 2, width: 0, height: 0, layoutOptions: { "elk.port.side": "WEST" } },
+                { id: `${node.id}::out`, x: node.width, y: node.height / 2, width: 0, height: 0, layoutOptions: { "elk.port.side": "EAST" } },
+              ],
+            }
+          : {}),
+      })),
+      edges: routable.map((edge) => ({
+        id: edge.id,
+        sources: [routed ? `${edge.source}::out` : edge.source],
+        targets: [routed ? `${edge.target}::in` : edge.target],
+      })),
     });
     const positioned = new Map((result.children ?? []).map((node) => [node.id, node]));
+    const routes = new Map<string, Pt[]>();
+    if (routed) {
+      for (const elkEdge of result.edges ?? []) {
+        const section = elkEdge.sections?.[0];
+        if (!section) continue;
+        // The graph is flat, so the container is the root; honour a nested
+        // container's offset anyway in case that ever changes.
+        const container = (elkEdge as { container?: string }).container;
+        const holder = container ? positioned.get(container) : undefined;
+        const [dx, dy] = [holder?.x ?? 0, holder?.y ?? 0];
+        routes.set(
+          elkEdge.id,
+          [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map((p) => ({
+            x: round1(p.x + dx),
+            y: round1(p.y + dy),
+          })),
+        );
+      }
+    }
     return {
       nodes: nodes.map((node, index) => {
         const positionedNode = positioned.get(node.id);
@@ -59,7 +124,9 @@ async function layout(nodes: LayoutInput[], edges: RenderEdge[]): Promise<Render
             : { x: (index % 4) * 260, y: Math.floor(index / 4) * 140 },
         };
       }),
-      edges,
+      edges: routed
+        ? edges.map((edge) => (routes.has(edge.id) ? { ...edge, route: routes.get(edge.id) } : edge))
+        : edges,
     };
   } catch {
     return {
@@ -315,7 +382,7 @@ export async function prepareRenderData(
     }
     edges.push(...boundaryEdges.values());
 
-    fileViewByFolder[cluster.name] = await layout(layoutInputs, edges);
+    fileViewByFolder[cluster.name] = await layout(layoutInputs, edges, true);
   }
 
   return { folderView, fileViewByFolder };
