@@ -1,12 +1,13 @@
 /**
- * In-memory sliding-window rate limiting for API routes.
+ * Sliding-window rate limiting for API routes.
  *
- * Limits are kept per server instance. On Vercel Fluid Compute an instance is
- * reused across many requests, so this stops casual abuse and protects
- * free-tier AI quotas, but it is not a global guarantee: separate instances
- * keep separate counters. A shared store (for example Upstash Redis) is the
- * upgrade path when that matters.
+ * The RateLimiter below keeps counters in memory, per server instance. It is
+ * the store for local dev, tests and e2e, and the per-request fallback when
+ * Redis is unreachable. When Upstash Redis is configured (see
+ * rateLimitStore.ts), the same rules are enforced across every instance, so
+ * the limit is global rather than multiplied by the instance count.
  */
+import { storeFromEnv, type RateLimitStore } from "./rateLimitStore";
 
 export type RateLimitRule = Readonly<{
   /** Stable name, used in keys and error messages. */
@@ -71,8 +72,7 @@ const MINUTE = 60_000;
 
 /**
  * Route budgets. The AI limits sit below the free tiers of the configured
- * providers (roughly 10-30 requests per minute each), with a per-instance
- * global cap so one busy page cannot exhaust a shared key.
+ * providers (roughly 10-30 requests per minute each), with a global cap so one busy page cannot exhaust a shared key.
  */
 export const RATE_LIMITS = {
   aiPerClient: [
@@ -98,20 +98,23 @@ export const RATE_LIMITS = {
 
 export const sharedRateLimiter = new RateLimiter();
 
+/** Redis when configured in the environment, otherwise the in-memory limiter. */
+export const sharedRateLimitStore: RateLimitStore = storeFromEnv(process.env, sharedRateLimiter);
+
 const GLOBAL_KEY = "*";
 
 /**
- * Applies the per-client rules and, optionally, instance-wide rules.
+ * Applies the per-client rules and, optionally, service-wide rules.
  * Returns a 429 response when limited, or null to continue.
  */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   request: Request,
   rules: ReadonlyArray<RateLimitRule>,
   globalRules: ReadonlyArray<RateLimitRule> = [],
-  limiter: RateLimiter = sharedRateLimiter,
-): Response | null {
-  const decision = limiter.consume(clientKey(request), rules);
-  const limited = decision.ok && globalRules.length ? limiter.consume(GLOBAL_KEY, globalRules) : decision;
+  store: RateLimitStore = sharedRateLimitStore,
+): Promise<Response | null> {
+  const decision = await store.consume(clientKey(request), rules);
+  const limited = decision.ok && globalRules.length ? await store.consume(GLOBAL_KEY, globalRules) : decision;
   if (limited.ok) return null;
   const busy = limited.rule.includes("global");
   return Response.json(

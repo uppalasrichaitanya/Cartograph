@@ -69,7 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // generation needs a provider.
   if (!hasAiProvider()) return NextResponse.json({ error: "AI review is not configured on this deployment." }, { status: 503 });
 
-  const limited = enforceRateLimit(request, RATE_LIMITS.aiPerClient, RATE_LIMITS.aiGlobal);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.aiPerClient, RATE_LIMITS.aiGlobal);
   if (limited) return limited;
 
   const prompt = buildReviewPrompt(model, result);

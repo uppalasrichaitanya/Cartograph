@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "zipPath is required." }, { status: 400 });
   }
 
-  const limited = enforceRateLimit(request, RATE_LIMITS.analyze);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.analyze);
   if (limited) return limited;
 
   try {

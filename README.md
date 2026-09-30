@@ -321,6 +321,7 @@ the local filesystem under `.data/`.
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini provider. Default model `gemini-2.5-flash`. |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Groq provider. Default model `openai/gpt-oss-120b`. |
 | `OPEN_ROUTER_API_KEY`, `OPEN_ROUTER_MODEL` | OpenRouter provider. Default model `openrouter/free`. |
+| `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`) | Upstash Redis, so rate limits are shared across serverless instances. Leave unset for per-instance in-memory limits. |
 
 All AI variables are optional; with none set, the AI guide reports that it is
 not configured. Keep them server-side and never prefix them with
@@ -330,7 +331,8 @@ not configured. Keep them server-side and never prefix them with
 
 1. Create a public Vercel Blob store and set `BLOB_READ_WRITE_TOKEN`.
 2. Add any AI provider variables you want to use.
-3. Deploy the Next.js app.
+3. Optional: add Upstash Redis from the Vercel Marketplace (free tier) so rate limits are shared across instances. The integration sets the `KV_REST_API_*` variables; if Redis is unreachable, limits fall back to per-instance memory.
+4. Deploy the Next.js app.
 
 Analysis routes request a 300-second duration, which requires Fluid Compute.
 The Go and Python tree-sitter WASM grammars are included in the production

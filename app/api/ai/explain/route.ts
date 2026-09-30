@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const limited = enforceRateLimit(request, RATE_LIMITS.aiPerClient, RATE_LIMITS.aiGlobal);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.aiPerClient, RATE_LIMITS.aiGlobal);
   if (limited) return limited;
 
   const generation = (async () => {

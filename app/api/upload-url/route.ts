@@ -18,7 +18,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Only token requests come from browsers. The completion callback comes
   // from Vercel's servers and must never be throttled.
   if (body.type === "blob.generate-client-token") {
-    const limited = enforceRateLimit(request, RATE_LIMITS.upload);
+    const limited = await enforceRateLimit(request, RATE_LIMITS.upload);
     if (limited) return limited as NextResponse;
   }
 

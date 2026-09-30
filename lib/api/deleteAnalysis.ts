@@ -11,7 +11,7 @@ import { isValidAnalysisId } from "@/lib/storage/interface";
 
 export async function handleDelete(request: Request, id: string, storage: StorageBackend): Promise<Response> {
   if (!isValidAnalysisId(id)) return Response.json({ error: "Analysis not found." }, { status: 404 });
-  const limited = enforceRateLimit(request, RATE_LIMITS.delete);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.delete);
   if (limited) return limited;
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1]?.trim();
   if (!token) return Response.json({ error: "A delete token is required." }, { status: 401 });

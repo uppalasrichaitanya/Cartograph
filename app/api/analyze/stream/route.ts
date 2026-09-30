@@ -25,7 +25,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: message }, { status: 400 });
   }
 
-  const limited = enforceRateLimit(request, RATE_LIMITS.analyze);
+  const limited = await enforceRateLimit(request, RATE_LIMITS.analyze);
   if (limited) return limited;
 
   const stream = new TransformStream();
