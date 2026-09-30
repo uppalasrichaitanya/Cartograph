@@ -36,7 +36,10 @@ function validRef(ref: string): boolean {
     !ref.includes("..") &&
     !ref.includes("//") &&
     !ref.startsWith("/") &&
-    !ref.endsWith("/")
+    !ref.endsWith("/") &&
+    // A lone "." segment is normalised away by URL parsing, which would
+    // fetch a different ref than the one shown.
+    !ref.split("/").some((segment) => segment === "." || segment === "")
   );
 }
 

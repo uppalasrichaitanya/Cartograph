@@ -55,6 +55,8 @@ const rejected: Array<[string, RegExp]> = [
   ["https://github.com/owner/repo/tree/a//b", /branch or tag/i],
   ["https://github.com/owner/repo/tree/a b", /branch or tag/i],
   ["https://github.com/owner/repo/tree/%2e%2e", /branch or tag/i],
+  ["https://github.com/owner/repo/tree/.", /branch or tag/i],
+  ["https://github.com/owner/repo/tree/a/./b", /branch or tag/i],
   [`https://github.com/owner/repo/tree/${"x".repeat(201)}`, /branch or tag/i],
   ["https://user:pw@github.com/owner/repo", /only github\.com/i],
   ["https://github.com:8080/owner/repo", /only github\.com/i],

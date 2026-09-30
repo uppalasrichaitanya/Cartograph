@@ -42,3 +42,7 @@ test("both or neither source is rejected", () => {
   assert.throws(() => parseAnalyzeRequest(null), badRequest(/JSON object/i));
   assert.throws(() => parseAnalyzeRequest("octo/cat"), badRequest(/JSON object/i));
 });
+
+test("a github value over 500 characters is rejected before parsing", () => {
+  assert.throws(() => parseAnalyzeRequest({ github: `octo/${"a".repeat(600)}` }), badRequest(/too long/i));
+});

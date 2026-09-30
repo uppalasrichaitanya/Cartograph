@@ -31,6 +31,7 @@ export function parseAnalyzeRequest(body: unknown): AnalysisOptions {
     if (typeof input.github !== "string") {
       throw new AnalyzeRequestError("github must be a GitHub repository link.");
     }
+    if (input.github.length > 500) throw new AnalyzeRequestError("That GitHub link is too long.");
     try {
       return { github: parseGithubSource(input.github), retention };
     } catch (error) {
