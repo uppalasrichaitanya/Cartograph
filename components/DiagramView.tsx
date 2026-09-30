@@ -1407,7 +1407,7 @@ function DiagramInner({
        * Fills everything the rail does not. Never resized by the inspector —
        * the camera offsets instead. */}
       <section
-        className={`map-region ${isFading ? "is-fading" : ""}`}
+        className={`map-region ${isFading ? "is-fading" : ""} ${edges.some((edge) => edge.type === "routed") ? "has-routed-edges" : ""}`}
         ref={canvas}
         aria-label="Interactive dependency diagram"
       >
