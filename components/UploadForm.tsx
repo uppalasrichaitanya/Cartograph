@@ -130,7 +130,10 @@ export function UploadForm({ useBlob = false, initialGithub = "" }: { useBlob?: 
       return;
     }
     const file = input.current?.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setError("Choose a .zip file to analyze.");
+      return;
+    }
     if (!file.name.toLowerCase().endsWith(".zip")) {
       setError("Choose a .zip archive of a JavaScript, TypeScript, Python, or Go project.");
       return;
@@ -231,7 +234,13 @@ export function UploadForm({ useBlob = false, initialGithub = "" }: { useBlob?: 
                 name="source"
                 value={value}
                 checked={mode === value}
-                onChange={() => { setMode(value); setFieldError(null); }}
+                onChange={() => {
+                  setMode(value);
+                  setFieldError(null);
+                  setError(null);
+                  // The file input is unmounted in GitHub mode: forget its file name too.
+                  setSelectedFileName(null);
+                }}
               />
               <span>{label}</span>
             </label>

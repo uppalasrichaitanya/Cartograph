@@ -126,6 +126,14 @@ test("GitHub mode: prefill from the URL, and a bad link is explained inline", as
   await expect(page.locator('input[type="file"]')).toBeAttached();
   await expect(page.getByLabel("Public GitHub repository")).toHaveCount(0);
 
+  // Generate with no file is never silent, and round-tripping the mode keeps no stale file.
+  await page.locator('input[type="file"]').setInputFiles({ name: "foo.zip", mimeType: "application/zip", buffer: Buffer.from("x") });
+  await expect(page.getByText("foo.zip")).toBeVisible();
+  await page.getByRole("radio", { name: "GitHub link" }).check();
+  await page.getByRole("radio", { name: "Zip file" }).check();
+  await expect(page.getByText("foo.zip")).toHaveCount(0);
+  await page.getByRole("button", { name: "Generate map" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /Choose a \.zip file/ })).toBeVisible();
   await page.getByRole("radio", { name: "GitHub link" }).check();
   const field = page.getByLabel("Public GitHub repository");
   await expect(field).toBeVisible();
