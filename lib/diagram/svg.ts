@@ -10,6 +10,7 @@
  * @module lib/diagram/svg
  */
 import { fontFaceCss } from "./fonts";
+import { roundedPath } from "./geometry";
 import {
   BUDGETS, DOCUMENT_CANVAS, edgeStroke, monoChars, SLIDE_CANVAS, TYPE_SCALE,
   truncateEnd, UNIT_PADDING, unitBox, unitKicker, unitMeta,
@@ -54,28 +55,6 @@ function styleBlock(theme: DiagramTheme, embedFonts: boolean, italic: boolean): 
     + `.ink{fill:${theme.ink}}.muted{fill:${theme.inkMuted}}.faint{fill:${theme.inkFaint}}`
     + `.accent{fill:${theme.accent}}.assisted{fill:${theme.assisted}}`
     + `</style>`;
-}
-
-const CORNER_RADIUS = 8;
-
-/** A polyline with each bend rounded by a quadratic curve, at most half of either neighbouring segment. */
-function roundedPath(points: ReadonlyArray<Point>): string {
-  let d = `M${num(points[0].x)} ${num(points[0].y)}`;
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const [prev, at, next] = [points[i - 1], points[i], points[i + 1]];
-    const before = Math.hypot(at.x - prev.x, at.y - prev.y);
-    const after = Math.hypot(next.x - at.x, next.y - at.y);
-    const radius = Math.min(CORNER_RADIUS, before / 2, after / 2);
-    if (radius < 0.5) {
-      d += `L${num(at.x)} ${num(at.y)}`;
-      continue;
-    }
-    const entry = { x: at.x + ((prev.x - at.x) / before) * radius, y: at.y + ((prev.y - at.y) / before) * radius };
-    const exit = { x: at.x + ((next.x - at.x) / after) * radius, y: at.y + ((next.y - at.y) / after) * radius };
-    d += `L${num(entry.x)} ${num(entry.y)}Q${num(at.x)} ${num(at.y)} ${num(exit.x)} ${num(exit.y)}`;
-  }
-  const last = points[points.length - 1];
-  return `${d}L${num(last.x)} ${num(last.y)}`;
 }
 
 function edgePath(points: ReadonlyArray<Point>, curved: boolean): string {
