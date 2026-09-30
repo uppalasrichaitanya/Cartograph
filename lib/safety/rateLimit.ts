@@ -89,6 +89,10 @@ export const RATE_LIMITS = {
     { name: "diagram-minute", windowMs: MINUTE, max: 30 },
     { name: "diagram-day", windowMs: 24 * 60 * MINUTE, max: 300 },
   ],
+  og: [
+    { name: "og-minute", windowMs: MINUTE, max: 60 },
+    { name: "og-day", windowMs: 24 * 60 * MINUTE, max: 1000 },
+  ],
   upload: [{ name: "upload-10min", windowMs: 10 * MINUTE, max: 10 }],
 } as const satisfies Record<string, ReadonlyArray<RateLimitRule>>;
 
