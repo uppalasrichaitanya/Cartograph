@@ -6,8 +6,11 @@ import { buildUploadPathname } from "@/lib/storage/uploadPathname";
 import { ProgressStream, type ProgressState } from "./ProgressStream";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 import { saveOwnerToken } from "@/lib/workspace/ownerToken";
+import { GithubSourceError, parseGithubSource } from "@/lib/github/source";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+type SourceMode = "zip" | "github";
 
 type StreamMessage =
   | { type: "progress"; phase: string; detail: string }
@@ -15,17 +18,14 @@ type StreamMessage =
   | { type: "error"; error: string };
 
 async function consumeAnalysisStream(
-  zipPath: string,
-  repoName: string,
-  repoSizeBytes: number,
-  retention: "7d" | "30d" | "manual",
+  requestBody: Record<string, unknown>,
   onProgress: (progress: ProgressState) => void,
   signal: AbortSignal,
 ): Promise<Extract<StreamMessage, { type: "result" }>> {
   const response = await fetch("/api/analyze/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ zipPath, repoName, repoSizeBytes, retention }),
+    body: JSON.stringify(requestBody),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -54,7 +54,7 @@ async function consumeAnalysisStream(
   throw new Error("The analysis stream ended before a result was returned.");
 }
 
-export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
+export function UploadForm({ useBlob = false, initialGithub = "" }: { useBlob?: boolean; initialGithub?: string }) {
   const input = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [progress, setProgress] = useState<ProgressState | null>(null);
@@ -64,6 +64,11 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
   const [isDragging, setIsDragging] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [retention, setRetention] = useState<"7d" | "30d" | "manual">("30d");
+  // `/?github=owner/repo` opens in GitHub mode with the value filled in. It
+  // never submits on its own: mapping someone's repository is a click away.
+  const [mode, setMode] = useState<SourceMode>(initialGithub ? "github" : "zip");
+  const [githubValue, setGithubValue] = useState(initialGithub);
+  const [fieldError, setFieldError] = useState<string | null>(null);
 
   const resetState = useCallback(() => {
     setIsWorking(false);
@@ -71,6 +76,7 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
     setError(null);
     setShowSkeleton(false);
     setSelectedFileName(null);
+    setFieldError(null);
     if (input.current) input.current.value = "";
   }, []);
 
@@ -80,8 +86,49 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
     resetState();
   }, [resetState]);
 
+  const arriveAtMap = (outcome: Extract<StreamMessage, { type: "result" }>) => {
+    const id = outcome.shareUrl.split("/").pop() ?? "";
+    saveOwnerToken(id, outcome.ownerToken);
+    // One-time notice on arrival: see OwnerNotice.
+    try { window.sessionStorage.setItem(`cartograph:new:${id}`, outcome.expiresAt ?? "manual"); } catch { /* unavailable */ }
+    window.location.assign(outcome.shareUrl);
+  };
+
+  const importFromGithub = async () => {
+    // The same parser the server applies, so a bad link is explained here
+    // without a round trip; the server still validates on its own.
+    try {
+      parseGithubSource(githubValue);
+    } catch (caught) {
+      setFieldError(caught instanceof GithubSourceError ? caught.message : "That doesn't look like a GitHub link.");
+      return;
+    }
+    setFieldError(null);
+    setError(null);
+    setIsWorking(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      setProgress({ phase: "validating", detail: "Contacting GitHub" });
+      setShowSkeleton(true);
+      const outcome = await consumeAnalysisStream({ github: githubValue.trim(), retention }, setProgress, controller.signal);
+      arriveAtMap(outcome);
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      setError(caught instanceof Error ? caught.message : "The import failed.");
+      setProgress(null);
+      setIsWorking(false);
+      setShowSkeleton(false);
+    }
+  };
+
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (mode === "github") {
+      await importFromGithub();
+      return;
+    }
     const file = input.current?.files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".zip")) {
@@ -140,12 +187,8 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
       const repoName = file.name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim() || "Untitled Repository";
       const repoSizeBytes = file.size;
 
-      const outcome = await consumeAnalysisStream(zipRef, repoName, repoSizeBytes, retention, setProgress, controller.signal);
-      const id = outcome.shareUrl.split("/").pop() ?? "";
-      saveOwnerToken(id, outcome.ownerToken);
-      // One-time notice on arrival: see OwnerNotice.
-      try { window.sessionStorage.setItem(`cartograph:new:${id}`, outcome.expiresAt ?? "manual"); } catch { /* unavailable */ }
-      window.location.assign(outcome.shareUrl);
+      const outcome = await consumeAnalysisStream({ zipPath: zipRef, repoName, repoSizeBytes, retention }, setProgress, controller.signal);
+      arriveAtMap(outcome);
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") {
         // User cancelled — silent reset.
@@ -177,24 +220,65 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
   return (
     <>
       <form className="upload-form" onSubmit={onSubmit}>
-        <label
-          className={`file-drop ${isDragging ? "is-dragging" : ""} ${selectedFileName ? "is-file-selected" : ""}`}
-          onDragEnter={onDragEnter}
-          onDragLeave={onDragLeave}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-        >
-          <input
-            ref={input}
-            type="file"
-            accept=".zip,application/zip,application/x-zip-compressed"
-            disabled={isWorking}
-            onChange={(event) => setSelectedFileName(event.currentTarget.files?.[0]?.name ?? null)}
-          />
-          <span className="file-icon" aria-hidden="true">{selectedFileName ? "📁" : "↑"}</span>
-          <span>{selectedFileName ?? "Drop a project zip here, or choose a file"}</span>
-          <small>JavaScript, TypeScript, Python &amp; Go · 25 MB max</small>
-        </label>
+        {/* Source: one of two ways in. A radio group, so arrow keys and the
+            browser's own semantics come for free; drawn as a segmented control. */}
+        <fieldset className="source-toggle" disabled={isWorking}>
+          <legend>Source</legend>
+          {([["zip", "Zip file"], ["github", "GitHub link"]] as const).map(([value, label]) => (
+            <label key={value} className={mode === value ? "is-on" : ""}>
+              <input
+                type="radio"
+                name="source"
+                value={value}
+                checked={mode === value}
+                onChange={() => { setMode(value); setFieldError(null); }}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        {mode === "zip" ? (
+          <label
+            className={`file-drop ${isDragging ? "is-dragging" : ""} ${selectedFileName ? "is-file-selected" : ""}`}
+            onDragEnter={onDragEnter}
+            onDragLeave={onDragLeave}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+          >
+            <input
+              ref={input}
+              type="file"
+              accept=".zip,application/zip,application/x-zip-compressed"
+              disabled={isWorking}
+              onChange={(event) => setSelectedFileName(event.currentTarget.files?.[0]?.name ?? null)}
+            />
+            <span className="file-icon" aria-hidden="true">{selectedFileName ? "📁" : "↑"}</span>
+            <span>{selectedFileName ?? "Drop a project zip here, or choose a file"}</span>
+            <small>JavaScript, TypeScript, Python &amp; Go · 25 MB max</small>
+          </label>
+        ) : (
+          <div className="github-field">
+            <label htmlFor="github-source">Public GitHub repository</label>
+            <input
+              id="github-source"
+              className="github-input"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="github.com/owner/repo"
+              value={githubValue}
+              disabled={isWorking}
+              aria-invalid={fieldError ? true : undefined}
+              aria-describedby={fieldError ? "github-help github-error" : "github-help"}
+              onChange={(event) => { setGithubValue(event.currentTarget.value); setFieldError(null); }}
+            />
+            <small id="github-help">Public repositories only · archive up to 25 MB · add /tree/branch for another branch</small>
+            {fieldError && <p id="github-error" className="form-error" role="alert">{fieldError}</p>}
+          </div>
+        )}
 
         {/* Buttons row: Submit + Cancel (Issue 29) */}
         <div className="upload-actions">
@@ -224,7 +308,7 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
         {/* Error display (Issue 28) */}
         {error && (
           <div className="upload-error-card" role="alert">
-            <p className="error-title">⚠ Analysis failed</p>
+            <p className="error-title">⚠ {mode === "github" ? "Import failed" : "Analysis failed"}</p>
             <p className="error-message">{error}</p>
             <div className="error-actions">
               <button type="button" className="button button-primary" onClick={resetState}>
@@ -233,13 +317,23 @@ export function UploadForm({ useBlob = false }: { useBlob?: boolean }) {
             </div>
             <details className="error-troubleshoot">
               <summary>Troubleshooting</summary>
-              <ul>
-                <li>The file must be a <strong>.zip</strong> archive</li>
-                <li>It should contain JavaScript (.js/.jsx), TypeScript (.ts/.tsx), Python (.py), or Go (.go) source files</li>
-                <li>Maximum file size is 25 MB</li>
-                <li>Ensure the zip doesn&apos;t contain only <code>node_modules</code> or <code>dist</code> folders</li>
-                <li>Try zipping the project root directory directly</li>
-              </ul>
+              {mode === "github" ? (
+                <ul>
+                  <li>The repository must be <strong>public</strong>; for a private one, upload a zip instead</li>
+                  <li>Use a link like <code>github.com/owner/repo</code>, or add <code>/tree/branch</code> for another branch or tag</li>
+                  <li>The repository&apos;s archive must be 25 MB or smaller</li>
+                  <li>It should contain JavaScript (.js/.jsx), TypeScript (.ts/.tsx), Python (.py), or Go (.go) source files</li>
+                  <li>If GitHub is busy, wait a minute and try again</li>
+                </ul>
+              ) : (
+                <ul>
+                  <li>The file must be a <strong>.zip</strong> archive</li>
+                  <li>It should contain JavaScript (.js/.jsx), TypeScript (.ts/.tsx), Python (.py), or Go (.go) source files</li>
+                  <li>Maximum file size is 25 MB</li>
+                  <li>Ensure the zip doesn&apos;t contain only <code>node_modules</code> or <code>dist</code> folders</li>
+                  <li>Try zipping the project root directory directly</li>
+                </ul>
+              )}
             </details>
           </div>
         )}

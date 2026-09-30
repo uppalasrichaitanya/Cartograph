@@ -5,7 +5,11 @@ import { MarkIcon } from "@/components/Icons";
 import { isUsingBlobStorage } from "@/lib/storage";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const deleted = (await searchParams).deleted === "1";
+  const params = await searchParams;
+  const deleted = params.deleted === "1";
+  // Prefill only: `/?github=owner/repo` selects GitHub mode, it never submits.
+  const rawGithub = Array.isArray(params.github) ? params.github[0] : params.github;
+  const initialGithub = typeof rawGithub === "string" ? rawGithub.slice(0, 300) : "";
   return (
     <main className="landing-shell">
       <header className="site-header">
@@ -30,12 +34,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           an import statement.
         </h1>
         <p className="hero-copy">
-          Upload a repository and get a map of what actually imports what.
+          Upload a zip or paste a public GitHub link and get a map of what actually imports what.
           Nothing is inferred from folder names, and anything that could not be
           resolved is drawn as unresolved rather than quietly dropped.
         </p>
         {deleted && <p className="home-notice" role="status">Analysis deleted. Its link no longer works.</p>}
-        <UploadForm useBlob={isUsingBlobStorage()} />
+        <UploadForm useBlob={isUsingBlobStorage()} initialGithub={initialGithub} />
         <p className="privacy-note">
           Archives are deleted after analysis. The map is public to anyone with its link until it expires or you delete it.
         </p>

@@ -84,9 +84,19 @@ or slide: grouped by folder, arrows weighted by import count, with a legend,
 a note of anything left out, and a line saying where it came from. Download
 SVG or 2× PNG, copy Mermaid for GitHub, or embed a live image link.
 
+## Using it
+
+Choose **Zip file** and drop a project archive, or choose **GitHub link** and
+paste a public repository: `owner/repo`, `github.com/owner/repo`, or
+`github.com/owner/repo/tree/<branch>` for another branch or tag. Cartograph
+fetches the repository's source archive from GitHub (public repositories only,
+up to 25 MB) and maps it the same way as an upload. Maps from GitHub carry a
+link back to the repository. `/?github=owner/repo` opens the form pre-filled, so
+a README badge can point at it; it never submits on its own.
+
 ## How it works
 
-1. You upload a repository as a `.zip`.
+1. You upload a repository as a `.zip`, or paste a public GitHub link.
 2. Cartograph validates the archive and discovers source files.
 3. Language parsers extract imports, declarations, and parse errors.
 4. The pipeline builds a validated intermediate representation and a
@@ -261,6 +271,10 @@ Uploaded archives are treated as hostile input.
   not by extension.
 - **Resources are bounded.** 25 MB compressed, 250 MB extracted, 800 source
   files. Parsing runs in a bounded worker pool.
+- **GitHub imports are fixed to GitHub.** The link is reduced to a validated
+  owner, repository, and optional ref; the host is never taken from the input.
+  The download follows at most three redirects, only to GitHub's own https
+  hosts, and stops at 25 MB while streaming, with a 60 second timeout.
 - **Uploads are temporary.** The archive is deleted after analysis; only the
   result JSON is kept. Only archives in this deployment's own Blob store are
   accepted.
