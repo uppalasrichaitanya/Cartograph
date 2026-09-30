@@ -138,7 +138,8 @@ export function storeFromEnv(
   const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
   const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return memory;
-  const redis = new Redis({ url, token });
+  // No client retries: FallbackStore already decides what a slow or failed call means.
+  const redis = new Redis({ url, token, retry: false });
   const evalScript: RedisEval = (script, keys, args) => redis.eval(script, keys, args);
   return new FallbackStore(new RedisStore(evalScript), memory);
 }
