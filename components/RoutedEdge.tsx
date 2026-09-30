@@ -3,7 +3,8 @@
 /**
  * A file-view edge drawn along the route ELK computed at analysis time.
  *
- * The route is anchored to where React Flow reports the handles. When a node
+ * The route is anchored to where React Flow reports the handles, shifted by
+ * the edge's own port offset. When a node
  * has been dragged away from it (or the analysis predates routing), the edge
  * falls back to the smoothstep path it used before, so it is never wrong,
  * only less tidy.
@@ -15,6 +16,8 @@ import { routedEdgePath } from "@/lib/workspace/routedPath";
 
 export type RoutedEdgeData = {
   route?: ReadonlyArray<{ x: number; y: number }>;
+  /** Port offsets from the handles' height; absent on older analyses (0). */
+  anchor?: { source: number; target: number };
   [key: string]: unknown;
 };
 
@@ -31,7 +34,11 @@ export function RoutedEdge({
   data,
 }: EdgeProps<Edge<RoutedEdgeData>>) {
   const routed = data?.route
-    ? routedEdgePath(data.route, { x: sourceX, y: sourceY }, { x: targetX, y: targetY })
+    ? routedEdgePath(
+        data.route,
+        { x: sourceX, y: sourceY + (data.anchor?.source ?? 0) },
+        { x: targetX, y: targetY + (data.anchor?.target ?? 0) },
+      )
     : null;
   const path =
     routed ??

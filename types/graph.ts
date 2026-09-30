@@ -163,14 +163,20 @@ export type RenderEdge = {
    */
   confidence?: GeometryConfidence;
   /**
-   * ELK's orthogonal route from the source's right-middle to the target's
-   * left-middle, in the same absolute coordinates as node positions.
+   * ELK's orthogonal route from a port on the source's east side to a port on
+   * the target's west side, in the same absolute coordinates as node positions.
    *
    * Absent on analyses made before routing existed and on region-view edges,
    * which are weighted beziers. The client then falls back to a smoothstep
    * path, so no migration is needed.
    */
   route?: ReadonlyArray<{ x: number; y: number }>;
+  /**
+   * Vertical offset of the route's two ends from their node's vertical centre
+   * (rounded to 0.1), so each arrow into a box has its own port. Absent on
+   * analyses made before ports were per edge: the client then assumes 0.
+   */
+  anchor?: { source: number; target: number };
 };
 
 export type RenderGraph = {

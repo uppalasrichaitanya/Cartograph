@@ -1,7 +1,7 @@
 /**
  * Routed file edges: the file view asks ELK for orthogonal routes anchored on
- * each node's right-middle (out) and left-middle (in); the region view stays
- * unrouted.
+ * a port of their own on each node's east (out) and west (in) side; the region
+ * view stays unrouted.
  *
  * @module tests/ir/routedEdges.test
  */
@@ -91,9 +91,12 @@ test("file-view edges between distinct nodes carry axis-aligned routes anchored 
         const start = route[0];
         const end = route[route.length - 1];
         assert.ok(Math.abs(start.x - (source.position.x + source.width!)) <= 1, `${edge.id} start x`);
-        assert.ok(Math.abs(start.y - (source.position.y + source.height! / 2)) <= 1, `${edge.id} start y`);
+        const anchor = edge.anchor;
+        assert.ok(anchor, `${edge.id} has no anchor`);
+        assert.ok(Math.abs(start.y - (source.position.y + source.height! / 2 + anchor.source)) <= 0.2, `${edge.id} start y`);
         assert.ok(Math.abs(end.x - target.position.x) <= 1, `${edge.id} end x`);
-        assert.ok(Math.abs(end.y - (target.position.y + target.height! / 2)) <= 1, `${edge.id} end y`);
+        assert.ok(Math.abs(end.y - (target.position.y + target.height! / 2 + anchor.target)) <= 0.2, `${edge.id} end y`);
+        assert.ok(Math.abs(anchor.source) <= source.height! / 2 && Math.abs(anchor.target) <= target.height! / 2, `${edge.id} anchor inside box`);
         for (let i = 1; i < route.length; i += 1) {
           const [a, b] = [route[i - 1], route[i]];
           assert.ok(Math.abs(a.x - b.x) < 0.11 || Math.abs(a.y - b.y) < 0.11, `${edge.id} segment ${i} is diagonal`);
@@ -107,12 +110,34 @@ test("file-view edges between distinct nodes carry axis-aligned routes anchored 
   }
 });
 
+test("arrows into the same node arrive at separate points", async () => {
+  const graph = {
+    nodes: [file("a.ts"), file("b.ts"), file("c.ts")],
+    edges: [
+      { id: "a-c", from: "a.ts", to: "c.ts" },
+      { id: "b-c", from: "b.ts", to: "c.ts" },
+      { id: "c-a", from: "c.ts", to: "a.ts" },
+    ],
+  };
+  const data = await prepareRenderData(graph, [{ name: "r", fileIds: ["a.ts", "b.ts", "c.ts"] }], null, []);
+  const edges = data.fileViewByFolder["r"].edges;
+  const end = (id: string) => edges.find((e) => e.id === id)!.route!.at(-1)!;
+  assert.ok(Math.abs(end("a-c").y - end("b-c").y) >= 8, "the two arrows into c end apart");
+  const anchors = edges.filter((e) => e.target === "c.ts").map((e) => e.anchor!.target);
+  assert.notEqual(anchors[0], anchors[1]);
+  // A lone port stays centred.
+  assert.equal(edges.find((e) => e.id === "c-a")!.anchor!.target, 0);
+});
+
 test("region-view edges are not routed", async () => {
   const dir = await makeFixture();
   try {
     const { renderData } = await analyze(dir);
     assert.ok(renderData.folderView.edges.length > 0, "fixture must produce region edges");
-    for (const edge of renderData.folderView.edges) assert.equal(edge.route, undefined);
+    for (const edge of renderData.folderView.edges) {
+      assert.equal(edge.route, undefined);
+      assert.equal(edge.anchor, undefined);
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

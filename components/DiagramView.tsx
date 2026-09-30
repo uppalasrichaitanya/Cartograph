@@ -225,7 +225,7 @@ function graphToFlow(
         ? { ...node.data, sizeShare: regionSizeShare(node.data.fileIds?.length ?? 0, maxFiles) }
         : node.data,
     })),
-    edges: graph.edges.map(({ route, ...edge }) => {
+    edges: graph.edges.map(({ route, anchor, ...edge }) => {
       const confidence = edge.confidence ?? "derived";
       const count = counts?.get(edge.id);
       const baseWidth = count ? edgeStrokeWidth(count) : 1.4;
@@ -250,7 +250,7 @@ function graphToFlow(
           confidence,
           count,
           baseWidth,
-          ...(!counts && route ? { route } : {}),
+          ...(!counts && route ? { route, ...(anchor ? { anchor } : {}) } : {}),
         },
         style: { strokeWidth: baseWidth, opacity: edgeRestOpacity(confidence) },
       };

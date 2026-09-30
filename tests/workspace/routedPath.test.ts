@@ -142,3 +142,17 @@ test("a back-edge loop keeps its shape with snapped ends and the default radius"
   assert.deepEqual(coords(d).at(-1), [0.5, 50]);
   assert.ok(d.includes("Q"), "corners are rounded");
 });
+
+test("anchored ends: handle plus port offset is what gets compared and snapped", () => {
+  // The route ends sit 14px below / 10px above the handles' height.
+  const anchored = [
+    { x: 0, y: 24 },
+    { x: 50, y: 24 },
+    { x: 50, y: 80 },
+    { x: 100, y: 80 },
+  ];
+  const [source, target] = [{ x: 0, y: 10 + 14 }, { x: 100, y: 90 - 10 }];
+  assert.ok(routedEdgePath(anchored, source, target));
+  // Ignoring the offsets, the handles are too far from the ends: stale.
+  assert.equal(routedEdgePath(anchored, { x: 0, y: 10 }, { x: 100, y: 90 }), null);
+});
