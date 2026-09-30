@@ -15,6 +15,8 @@ import { safeUnzip } from "@/lib/safety/safeUnzip";
 import { SafetyEventLog } from "@/lib/safety/eventLog";
 import { getStorage, isUsingBlobStorage, StorageError } from "@/lib/storage";
 import { isValidUploadReference } from "@/lib/storage/uploadReference";
+import { downloadGithubArchive } from "@/lib/github/download";
+import { githubDisplayName, githubRepoUrl, type GithubSource } from "@/lib/github/source";
 import { buildRepositoryIR } from "./ir/bridge";
 import { buildArchitectureModel } from "./architecture-model/model";
 import { inferArchitectureViews } from "./architecture-model/inference";
@@ -38,29 +40,53 @@ export type ProgressReporter = (phase: ProgressPhase, detail: string) => void | 
 
 export class AnalysisError extends Error {}
 
-export type AnalysisOptions = {
-  zipPath: string;
+type CommonAnalysisOptions = {
   repoName?: string;
   repoSizeBytes?: number;
   retention?: RetentionChoice;
 };
 
+/**
+ * Either an archive already in storage (`zipPath`, the upload flow) or a
+ * public GitHub repository to fetch (`github`, already validated by
+ * parseGithubSource). Exactly one source per run.
+ */
+export type AnalysisOptions =
+  | (CommonAnalysisOptions & { zipPath: string; github?: never })
+  | (CommonAnalysisOptions & { github: GithubSource; zipPath?: never });
+
+/** Injection points for tests; production uses the defaults. */
+export type AnalysisDeps = {
+  downloadGithubArchive?: typeof downloadGithubArchive;
+};
+
 export async function analyzeRepository(
   optionsOrPath: string | AnalysisOptions,
   report: ProgressReporter = () => {},
+  deps: AnalysisDeps = {},
 ): Promise<AnalysisResult & { ownerToken: string }> {
   const options: AnalysisOptions =
     typeof optionsOrPath === "string" ? { zipPath: optionsOrPath } : optionsOrPath;
-  const { zipPath, repoName = "Untitled Repository", repoSizeBytes = null } = options;
+  const { github, zipPath } = options;
+  const repoSizeBytesOption = options.repoSizeBytes ?? null;
+  const repoName =
+    options.repoName ?? (github ? githubDisplayName(github) : "Untitled Repository");
 
-  const storageMode = isUsingBlobStorage() ? "blob" : "local";
-  if (!isValidUploadReference(zipPath, storageMode)) {
-    throw new StorageError("The upload reference is invalid or is not owned by Cartograph.");
+  if (zipPath !== undefined) {
+    const storageMode = isUsingBlobStorage() ? "blob" : "local";
+    if (!isValidUploadReference(zipPath, storageMode)) {
+      throw new StorageError("The upload reference is invalid or is not owned by Cartograph.");
+    }
+  } else if (!github) {
+    throw new AnalysisError("An archive or a GitHub repository is required.");
   }
 
   const storage = getStorage();
 
-  await report("validating", "Checking the uploaded archive");
+  await report(
+    "validating",
+    github ? `Downloading ${githubDisplayName(github)} from GitHub` : "Checking the uploaded archive",
+  );
 
   // --- Phase 6 integration: Safety Event Log ---
   // Create a per-run event log to capture all safety rejections.
@@ -72,14 +98,24 @@ export async function analyzeRepository(
   try {
     // If zipPath is a remote URL (Vercel Blob), download it to a local
     // temp file first. The rest of the pipeline operates on local paths.
-    let localZipPath = zipPath;
-    if (zipPath.startsWith("http://") || zipPath.startsWith("https://")) {
+    let localZipPath: string;
+    let repoSizeBytes = repoSizeBytesOption;
+    if (github) {
+      // The archive is written inside the temp dir, so the finally block below
+      // removes it with everything else; there is no stored upload to delete.
+      localZipPath = path.join(temporaryDirectory, "github.zip");
+      const download = deps.downloadGithubArchive ?? downloadGithubArchive;
+      const { bytes } = await download(github, localZipPath);
+      repoSizeBytes = bytes;
+    } else if (zipPath!.startsWith("http://") || zipPath!.startsWith("https://")) {
       await report("validating", "Downloading the archive from storage");
-      const response = await fetch(zipPath);
+      const response = await fetch(zipPath!);
       if (!response.ok) throw new AnalysisError("Failed to download the uploaded archive.");
       const buffer = Buffer.from(await response.arrayBuffer());
       localZipPath = path.join(temporaryDirectory, "upload.zip");
       await writeFile(localZipPath, buffer);
+    } else {
+      localZipPath = zipPath!;
     }
 
     const extractionDirectory = path.join(temporaryDirectory, "repository");
@@ -207,7 +243,10 @@ export async function analyzeRepository(
       architectureModel,
     );
 
-    const repoMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
+    const detectedMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
+    const repoMeta = github
+      ? { ...detectedMeta, source: { kind: "github" as const, url: githubRepoUrl(github) } }
+      : detectedMeta;
 
     const id = randomUUID();
     const createdAt = new Date().toISOString();
@@ -239,7 +278,8 @@ export async function analyzeRepository(
     return { ...result, ownerToken };
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
-    // Clean up the uploaded zip/blob.
-    await storage.deleteUpload(zipPath);
+    // Clean up the uploaded zip/blob. A GitHub import has none: its archive
+    // lived in the temp dir removed above.
+    if (zipPath !== undefined) await storage.deleteUpload(zipPath);
   }
 }
