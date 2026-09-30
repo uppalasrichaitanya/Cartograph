@@ -14,7 +14,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     <main className="landing-shell">
       <header className="site-header">
         <Link className="brand" href="/" aria-label="Cartograph home">
-          <MarkIcon size={17} />
+          <MarkIcon size={26} />
           Cartograph
         </Link>
         <span className="header-note">Static analysis only</span>

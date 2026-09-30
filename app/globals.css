@@ -344,10 +344,10 @@ code, kbd, samp { font-family: var(--type-mono); }
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0.625rem;
   padding: 0;
   color: var(--focus);
-  font-size: var(--text-body);
+  font-size: var(--text-title);
   font-weight: 600;
   letter-spacing: var(--track-title);
   border: none;
