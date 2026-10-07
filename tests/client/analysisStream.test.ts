@@ -81,3 +81,33 @@ test("a caller abort propagates as an AbortError", async () => {
   setTimeout(() => controller.abort(), 20);
   await assert.rejects(p, (e: unknown) => e instanceof DOMException && e.name === "AbortError");
 });
+
+test("a request that never gets a response (hang before the first byte) fails with an idle error", async () => {
+  const hanging = ((_url: unknown, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    })) as typeof fetch;
+  const started = Date.now();
+  await assert.rejects(consumeAnalysisStream({}, () => {}, options(hanging, 80)), /stopped responding/);
+  assert.ok(Date.now() - started < 2000);
+});
+
+test("a stalled reader.cancel() cannot delay the idle error", async () => {
+  const fetchImpl = (async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(sse({ type: "progress", phase: "parsing", detail: "x" })); },
+      cancel: () => new Promise<void>(() => {}), // never settles, like a dead socket
+    });
+    return new Response(stream, { status: 200 });
+  }) as typeof fetch;
+  const started = Date.now();
+  await assert.rejects(consumeAnalysisStream({}, () => {}, options(fetchImpl, 80)), /stopped responding/);
+  assert.ok(Date.now() - started < 1500);
+});
+
+test("the default idle timeout is longer than the server's analysis budget", async () => {
+  const { STREAM_IDLE_TIMEOUT_MS } = await import("@/lib/client/analysisStream");
+  const { ANALYSIS_BUDGET_MS } = await import("@/lib/analysis/analyzeRepository");
+  assert.ok(STREAM_IDLE_TIMEOUT_MS > ANALYSIS_BUDGET_MS);
+  assert.ok(STREAM_IDLE_TIMEOUT_MS <= 300_000, "and still inside the function's maxDuration");
+});

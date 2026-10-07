@@ -6,9 +6,10 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * SSE comment line sent while a phase runs silently. It keeps proxies from
- * idling the connection out and lets the client tell "slow but alive" (it
- * keeps hearing us) from "gone" (it hears nothing).
+ * SSE comment line sent on a timer while a phase runs silently. It keeps
+ * proxies from idling the connection out and lets the client detect a dead
+ * connection or function (it hears nothing). It is not a progress signal: it
+ * keeps flowing while an await is stuck, which the analysis time budget ends.
  */
 const HEARTBEAT_MS = 10_000;
 const HEARTBEAT = new TextEncoder().encode(": keep-alive\n\n");
