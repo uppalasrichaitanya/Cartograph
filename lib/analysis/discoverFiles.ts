@@ -23,7 +23,7 @@ export type ProjectFile = {
  * a project root. Also used as the fallback for discoverSourceFiles()
  * when no registry-provided set is given.
  */
-const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go"]);
+const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".py", ".go"]);
 const EXCLUDED_DIRECTORIES = new Set([
   // JavaScript / TypeScript
   "node_modules", ".git", "dist", "build", ".next",

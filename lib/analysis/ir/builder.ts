@@ -61,8 +61,8 @@ export function languageFromPath(filePath: string): LanguageId {
   const dotIndex = filePath.lastIndexOf(".");
   if (dotIndex === -1) return "javascript";
   const ext = filePath.slice(dotIndex).toLowerCase();
-  if (ext === ".ts" || ext === ".tsx") return "typescript";
-  if (ext === ".js" || ext === ".jsx") return "javascript";
+  if (ext === ".ts" || ext === ".tsx" || ext === ".mts" || ext === ".cts") return "typescript";
+  if (ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs") return "javascript";
   if (ext === ".py") return "python";
   if (ext === ".go") return "go";
   return "javascript";

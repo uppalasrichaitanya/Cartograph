@@ -54,7 +54,16 @@ import { extractTypeScriptDeclarations } from "./declarations";
  *
  * Walks the AST and extracts string literal specifiers from:
  *   - import declarations: `import { x } from "y"`
- *   - export declarations: `export { x } from "y"`
+ *   - export declarations: `export { x } from "y"`, `export * from "y"`
+ *   - TS import-equals: `import x = require("y")`
+ *   - CommonJS require calls with a literal argument: `require("y")`
+ *     in any position (`const x = require(..)`, destructuring,
+ *     `module.exports = require(..)`, a bare side-effect statement).
+ *
+ * A `require` whose argument is not a literal (a variable, a concatenation,
+ * a template with substitutions) names no file the source can prove, so it
+ * contributes nothing — never a guessed edge. `require.resolve(..)` is a
+ * property access, not a require call, and is likewise ignored.
  *
  * Uses a Set to deduplicate specifiers (same file may import from
  * the same module multiple times with different bindings).
@@ -73,6 +82,22 @@ function collectModuleSpecifiers(sourceFile: ts.SourceFile): string[] {
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       specifiers.add(node.moduleSpecifier.text);
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      ts.isStringLiteralLike(node.moduleReference.expression)
+    ) {
+      specifiers.add(node.moduleReference.expression.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "require" &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      // isStringLiteralLike admits only 'x', "x" and a template with no
+      // substitutions (`x`); a template with ${} is a TemplateExpression.
+      specifiers.add(node.arguments[0].text);
     }
     ts.forEachChild(node, visit);
   };
@@ -132,7 +157,8 @@ function diagnosticsToParseErrors(
 /**
  * TypeScript/JavaScript parser plugin.
  *
- * Handles .ts, .tsx, .js, and .jsx files. Uses the TypeScript compiler
+ * Handles .ts, .tsx, .js, .jsx and the explicit-module-format variants
+ * .mjs, .cjs, .mts and .cts files. Uses the TypeScript compiler
  * API for parsing and diagnostics, and tsconfig.json/jsconfig.json
  * path aliases for import resolution.
  */
@@ -140,7 +166,7 @@ export class TypeScriptParser implements LanguageParser {
   readonly id = "typescript";
   readonly name = "TypeScript/JavaScript";
   readonly language = "typescript" as const;
-  readonly extensions = ["ts", "tsx", "js", "jsx"] as const;
+  readonly extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"] as const;
   readonly capabilities = ["imports", "declarations"] as const;
 
   /** Alias config read during initialize(). Cleared on dispose(). */

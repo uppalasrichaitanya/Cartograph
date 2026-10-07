@@ -83,6 +83,12 @@ export interface ConformanceExpectation {
    */
   readonly externalImports?: Record<string, string[]>;
   /**
+   * Expected unresolved-internal specifiers per file: syntactically internal
+   * (relative/absolute) references whose target is not a discovered file.
+   * Key: relative file path. Value: sorted array of raw specifiers.
+   */
+  readonly unresolvedInternalImports?: Record<string, string[]>;
+  /**
    * Files expected to have parse errors.
    * Listed by relative file path.
    */
@@ -258,6 +264,23 @@ export function runConformanceSuite(
                 [...extraction.externalImports].sort(),
                 [...expectedExternals].sort(),
                 `External imports mismatch for ${filePath}`,
+              );
+            }
+          });
+        }
+
+        // -----------------------------------------------------------------
+        // Assertion: unresolved-internal imports per file
+        // -----------------------------------------------------------------
+        if (fixture.expected.unresolvedInternalImports) {
+          await t.test("unresolved internal imports", () => {
+            for (const [filePath, expected] of Object.entries(fixture.expected.unresolvedInternalImports!)) {
+              const extraction = result.extractions.find((e) => e.path === filePath);
+              assert.ok(extraction, `Extraction not found for ${filePath}`);
+              assert.deepEqual(
+                [...(extraction.unresolvedInternalImports ?? [])].sort(),
+                [...expected].sort(),
+                `Unresolved internal imports mismatch for ${filePath}`,
               );
             }
           });
