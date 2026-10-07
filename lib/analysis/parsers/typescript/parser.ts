@@ -109,8 +109,9 @@ function findBinding(from: ts.Node, name: string): ts.Node | undefined {
         if (bindingOf(parameter.name, name)) return parameter;
       }
       if (ts.isFunctionExpression(scope) && scope.name?.text === name) return scope;
-      if (scope.body) {
-        const hoisted = hoistedVarIn(scope.body, name);
+      const body = (scope as ts.FunctionLikeDeclaration).body;
+      if (body) {
+        const hoisted = hoistedVarIn(body, name);
         if (hoisted) return hoisted;
       }
     }
