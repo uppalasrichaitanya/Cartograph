@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, type Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
@@ -57,7 +57,7 @@ const PACKAGE_ROOT_MARKERS = new Set(["package.json", "tsconfig.json", "pyprojec
 /** Conventional build-output directory names, honoured only beside a package root. */
 const BUILD_OUTPUT_NAMES = new Set(["dist", "build"]);
 
-type DirectoryEntries = Awaited<ReturnType<typeof readdir>>;
+type DirectoryEntries = Dirent<string>[];
 
 /**
  * Is this directory a Python virtualenv? Decided by content, never by name:
