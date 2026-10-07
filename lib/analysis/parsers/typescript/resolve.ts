@@ -17,7 +17,7 @@
  * @module lib/analysis/parsers/typescript/resolve
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import type { ParseFileInput, ResolvedSpecifier } from "../interface";
@@ -38,8 +38,10 @@ const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts",
  * TypeScript's NodeNext/Bundler convention: an import written against the
  * *emitted* file name ("./x.js") refers to the source file that emits it
  * ("./x.ts" / "./x.tsx"). Same for .jsx, .mjs and .cjs. Probed only after
- * the literal path failed to match a discovered file, exactly as the
- * compiler does, so a real "x.js" always wins over "x.ts".
+ * the literal path failed to match a discovered file, so a real "x.js" always
+ * wins over "x.ts". This is a deliberate, conservative choice: tsc itself tries
+ * x.ts before x.js, but it differs only when a compiled x.js is committed next
+ * to its x.ts, and the literal file is what Node would load at runtime.
  */
 const EMITTED_TO_SOURCE_EXTENSIONS: Record<string, string[]> = {
   ".js": [".ts", ".tsx"],
@@ -130,6 +132,25 @@ function candidatePaths(candidate: string): string[] {
 // ---------------------------------------------------------------------------
 // Alias Matching
 // ---------------------------------------------------------------------------
+
+/**
+ * Is the relative/absolute target a real file on disk that is simply not
+ * source code (JSON, CSS, an image, ...)? Such a reference is not broken, but
+ * it is not a code dependency either, so it is neither an edge nor an
+ * unresolved-internal reference. Source-extension targets never qualify: a
+ * missing .ts/.js file is genuinely unresolved (or was skipped by discovery).
+ */
+function isExistingNonSourceFile(base: string): boolean {
+  for (const candidate of [base, `${base}.json`]) {
+    if (SOURCE_EXTENSIONS.some((extension) => candidate.endsWith(extension))) continue;
+    try {
+      if (statSync(candidate).isFile()) return true;
+    } catch {
+      // not there
+    }
+  }
+  return false;
+}
 
 /**
  * Match a specifier against a tsconfig path alias pattern.
@@ -239,6 +260,7 @@ export function resolveSpecifier(
       : path.resolve(path.dirname(fromFile.absolutePath), specifier);
     const resolved = lookupCandidate(base, knownFilesMap);
     if (resolved) return { resolved, raw: specifier };
+    if (isExistingNonSourceFile(base)) return { resolved: null, raw: specifier, unresolvedKind: "non-code" };
     // Syntactically internal but no such file — a broken internal reference,
     // not a third-party package.
     return {

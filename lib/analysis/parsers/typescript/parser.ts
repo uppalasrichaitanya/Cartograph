@@ -46,6 +46,136 @@ import {
 import { extractTypeScriptDeclarations } from "./declarations";
 
 // ---------------------------------------------------------------------------
+// Scope Analysis for `require`
+// ---------------------------------------------------------------------------
+
+/** Find `name` among the identifiers a binding name introduces. */
+function bindingOf(binding: ts.BindingName, name: string): ts.Node | undefined {
+  if (ts.isIdentifier(binding)) return binding.text === name ? binding : undefined;
+  for (const element of binding.elements) {
+    if (ts.isOmittedExpression(element)) continue;
+    const found = bindingOf(element.name, name);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** The declaration of `name` made by one statement, if it makes one. */
+function declarationInStatement(statement: ts.Node, name: string): ts.Node | undefined {
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.find((d) => bindingOf(d.name, name));
+  }
+  if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name?.text === name) {
+    return statement;
+  }
+  if (ts.isImportDeclaration(statement)) {
+    const clause = statement.importClause;
+    if (clause?.name?.text === name) return clause;
+    const bindings = clause?.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === name) return bindings;
+    if (bindings && ts.isNamedImports(bindings)) return bindings.elements.find((e) => e.name.text === name);
+  }
+  if (ts.isImportEqualsDeclaration(statement) && statement.name.text === name) return statement;
+  return undefined;
+}
+
+/** `var` declarations hoist to the enclosing function: search nested blocks, not nested functions. */
+function hoistedVarIn(node: ts.Node, name: string): ts.Node | undefined {
+  let found: ts.Node | undefined;
+  const visit = (child: ts.Node) => {
+    if (found || ts.isFunctionLike(child) || ts.isClassLike(child)) return;
+    if (ts.isVariableDeclaration(child) && ts.isVariableDeclarationList(child.parent)) {
+      const list = child.parent;
+      if (!(list.flags & ts.NodeFlags.BlockScoped) && bindingOf(child.name, name)) {
+        found = child;
+        return;
+      }
+    }
+    ts.forEachChild(child, visit);
+  };
+  ts.forEachChild(node, visit);
+  return found;
+}
+
+/**
+ * The nearest declaration of `name` visible from `from`, or undefined when
+ * the name is not bound in this file (a free variable: for `require`, the
+ * CommonJS loader).
+ */
+function findBinding(from: ts.Node, name: string): ts.Node | undefined {
+  for (let scope: ts.Node | undefined = from.parent; scope; scope = scope.parent) {
+    if (ts.isFunctionLike(scope)) {
+      for (const parameter of scope.parameters) {
+        if (bindingOf(parameter.name, name)) return parameter;
+      }
+      if (ts.isFunctionExpression(scope) && scope.name?.text === name) return scope;
+      if (scope.body) {
+        const hoisted = hoistedVarIn(scope.body, name);
+        if (hoisted) return hoisted;
+      }
+    }
+    if (ts.isBlock(scope) || ts.isSourceFile(scope) || ts.isModuleBlock(scope)) {
+      for (const statement of scope.statements) {
+        const declared = declarationInStatement(statement, name);
+        if (declared) return declared;
+      }
+      if (ts.isSourceFile(scope)) {
+        const hoisted = hoistedVarIn(scope, name);
+        if (hoisted) return hoisted;
+      }
+    }
+    if (ts.isCaseBlock(scope)) {
+      for (const clause of scope.clauses) {
+        for (const statement of clause.statements) {
+          const declared = declarationInStatement(statement, name);
+          if (declared) return declared;
+        }
+      }
+    }
+    if (
+      (ts.isForStatement(scope) || ts.isForInStatement(scope) || ts.isForOfStatement(scope)) &&
+      scope.initializer &&
+      ts.isVariableDeclarationList(scope.initializer)
+    ) {
+      const declared = scope.initializer.declarations.find((d) => bindingOf(d.name, name));
+      if (declared) return declared;
+    }
+    if (ts.isCatchClause(scope) && scope.variableDeclaration && bindingOf(scope.variableDeclaration.name, name)) {
+      return scope.variableDeclaration;
+    }
+  }
+  return undefined;
+}
+
+/** `createRequire(...)` or `module.createRequire(...)`: a genuine require factory. */
+function isCreateRequireCall(node: ts.Expression | undefined): boolean {
+  if (!node || !ts.isCallExpression(node)) return false;
+  const callee = node.expression;
+  if (ts.isIdentifier(callee)) return callee.text === "createRequire";
+  return ts.isPropertyAccessExpression(callee) && callee.name.text === "createRequire";
+}
+
+/**
+ * Is this call a genuine CommonJS require?
+ *
+ *   - `require(...)` with `require` unbound in the file: the module loader.
+ *   - `X(...)` where X is declared as `const X = createRequire(...)`: a
+ *     require function created for ESM (including the idiomatic
+ *     `const require = createRequire(import.meta.url)`).
+ *
+ * A `require` bound any other way (parameter, local variable, function,
+ * import) is some other function, as in webpack/UMD wrappers, so it names no
+ * file. `module.require(...)` is deliberately not captured.
+ */
+function isRequireCall(call: ts.CallExpression): boolean {
+  if (!ts.isIdentifier(call.expression)) return false;
+  const name = call.expression.text;
+  const binding = findBinding(call, name);
+  if (binding === undefined) return name === "require";
+  return ts.isVariableDeclaration(binding) && isCreateRequireCall(binding.initializer);
+}
+
+// ---------------------------------------------------------------------------
 // AST Walking
 // ---------------------------------------------------------------------------
 
@@ -58,17 +188,19 @@ import { extractTypeScriptDeclarations } from "./declarations";
  *   - TS import-equals: `import x = require("y")`
  *   - CommonJS require calls with a literal argument: `require("y")`
  *     in any position (`const x = require(..)`, destructuring,
- *     `module.exports = require(..)`, a bare side-effect statement).
+ *     `module.exports = require(..)`, a bare side-effect statement), and
+ *     calls through a `createRequire(..)` alias
+ *   - dynamic `import("y")` with a literal first argument (an optional
+ *     second argument, import attributes, is ignored)
  *
- * A `require` whose argument is not a literal (a variable, a concatenation,
- * a template with substitutions) names no file the source can prove, so it
- * contributes nothing — never a guessed edge. `require.resolve(..)` is a
- * property access, not a require call, and is likewise ignored.
+ * An argument that is not a literal (a variable, a concatenation, a template
+ * with substitutions) names no file the source can prove, so it contributes
+ * nothing: never a guessed edge. `require.resolve(..)` is a property access,
+ * not a require call, and is likewise ignored. Comments and string contents
+ * are never AST call nodes, so text like "require('./x')" in them is ignored.
  *
  * Uses a Set to deduplicate specifiers (same file may import from
  * the same module multiple times with different bindings).
- *
- * Logic is identical to the legacy `extractImports.collectModuleSpecifiers()`.
  *
  * @param sourceFile - The parsed TypeScript source file AST
  * @returns Array of unique module specifier strings
@@ -88,16 +220,13 @@ function collectModuleSpecifiers(sourceFile: ts.SourceFile): string[] {
       ts.isStringLiteralLike(node.moduleReference.expression)
     ) {
       specifiers.add(node.moduleReference.expression.text);
-    } else if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === "require" &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteralLike(node.arguments[0])
-    ) {
+    } else if (ts.isCallExpression(node) && node.arguments.length >= 1 && ts.isStringLiteralLike(node.arguments[0])) {
       // isStringLiteralLike admits only 'x', "x" and a template with no
-      // substitutions (`x`); a template with ${} is a TemplateExpression.
-      specifiers.add(node.arguments[0].text);
+      // substitutions; a template with ${} is a TemplateExpression.
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      if (isDynamicImport || (node.arguments.length === 1 && isRequireCall(node))) {
+        specifiers.add(node.arguments[0].text);
+      }
     }
     ts.forEachChild(node, visit);
   };

@@ -176,6 +176,9 @@ export async function extractAll(
       if (resolved.resolved !== null) {
         internalImports.add(resolved.resolved);
         if (resolved.approximate) approximateInternalImports.add(resolved.resolved);
+      } else if (resolved.unresolvedKind === "non-code") {
+        // A real non-source file (JSON, CSS, image): no edge, nothing broken.
+        continue;
       } else if (resolved.unresolvedKind === "unresolved-internal") {
         unresolvedInternalImports.add(specifier);
       } else {

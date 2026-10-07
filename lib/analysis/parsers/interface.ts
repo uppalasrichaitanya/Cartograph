@@ -120,6 +120,9 @@ export interface ResolvedSpecifier {
    *   matches a known project package), but the full path does not resolve
    *   to a real file. These should NOT become graph edges or be reclassified
    *   as external — they represent broken internal references.
+   * - 'non-code': the import names a real file that exists on disk but is not
+   *   source code (JSON, CSS, an image). It is not an edge and not a broken
+   *   reference, so the orchestrator drops it from every list.
    *
    * Added in Milestone 3 (§4.1) for Python's three-outcome resolution.
    * Pre-approved additive change — backward-compatible with all existing parsers.
@@ -157,7 +160,7 @@ export interface ResolvedSpecifier {
    * cross-language metric, and do not "normalize" the two classifications to
    * make the numbers converge — the asymmetry is truthful.
    */
-  readonly unresolvedKind?: "external" | "unresolved-internal";
+  readonly unresolvedKind?: "external" | "unresolved-internal" | "non-code";
   /** True when resolution selected a representative rather than an exact file. */
   readonly approximate?: boolean;
 }
