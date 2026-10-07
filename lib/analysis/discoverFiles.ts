@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import ts from "typescript";
 
 /**
  * Describes a discovered source file in the project.
@@ -24,11 +26,17 @@ export type ProjectFile = {
  * when no registry-provided set is given.
  */
 const DEFAULT_SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".py", ".go"]);
+/**
+ * Directories skipped by name alone: names that only ever mean tooling output
+ * or vendored dependencies. Names that are also ordinary source folder names
+ * (env, venv, build, dist) are NOT here; see isPythonVirtualenv and
+ * isBuildOutputDirectory.
+ */
 const EXCLUDED_DIRECTORIES = new Set([
   // JavaScript / TypeScript
-  "node_modules", ".git", "dist", "build", ".next",
-  // Python — virtual environments
-  ".venv", "venv", "env",
+  "node_modules", ".git", ".next",
+  // Python — virtual environments (dot-named ones are also caught by the dot rule)
+  ".venv",
   // Python — caches and tool artifacts
   "__pycache__", ".pytest_cache", ".tox", ".mypy_cache", ".ruff_cache",
   // Python — build artifacts
@@ -43,6 +51,51 @@ const EXCLUDED_DIRECTORIES = new Set([
  */
 const EXCLUDED_DIRECTORY_SUFFIXES = [".egg-info"];
 export const MAX_SOURCE_FILES = 800;
+
+/** Files whose presence makes a directory a package/project root. */
+const PACKAGE_ROOT_MARKERS = new Set(["package.json", "tsconfig.json", "pyproject.toml", "setup.py", "go.mod"]);
+/** Conventional build-output directory names, honoured only beside a package root. */
+const BUILD_OUTPUT_NAMES = new Set(["dist", "build"]);
+
+type DirectoryEntries = Awaited<ReturnType<typeof readdir>>;
+
+/**
+ * Is this directory a Python virtualenv? Decided by content, never by name:
+ * a pyvenv.cfg file, or an activate script together with a site-packages
+ * folder. A source package that happens to be called "env" has neither.
+ */
+async function isPythonVirtualenv(directory: string, entries: DirectoryEntries): Promise<boolean> {
+  const names = new Set(entries.map((entry) => entry.name));
+  if (entries.some((entry) => entry.name === "pyvenv.cfg" && entry.isFile())) return true;
+  const scriptsDirectory = ["bin", "Scripts"].find((name) => names.has(name));
+  if (!scriptsDirectory) return false;
+  try {
+    const scripts = await readdir(path.join(directory, scriptsDirectory));
+    if (!scripts.some((name) => name === "activate" || name === "activate.bat")) return false;
+    if (names.has("Lib") && (await readdir(path.join(directory, "Lib"))).includes("site-packages")) return true;
+    if (names.has("lib")) {
+      for (const child of await readdir(path.join(directory, "lib"))) {
+        if (child === "site-packages") return true;
+        if (child.startsWith("python") && (await readdir(path.join(directory, "lib", child))).includes("site-packages")) return true;
+      }
+    }
+  } catch {
+    // unreadable: treat as not a virtualenv
+  }
+  return false;
+}
+
+/** The tsconfig outDir declared directly in this directory, resolved, if any. */
+function configuredOutDirectory(directory: string): string | null {
+  try {
+    const configPath = path.join(directory, "tsconfig.json");
+    const config = ts.readConfigFile(configPath, (file) => readFileSync(file, "utf8"));
+    const outDir = config.config?.compilerOptions?.outDir;
+    return typeof outDir === "string" ? path.resolve(directory, outDir) : null;
+  } catch {
+    return null;
+  }
+}
 
 export class DiscoveryError extends Error {}
 
@@ -87,15 +140,26 @@ export async function discoverSourceFiles(
     : DEFAULT_SOURCE_EXTENSIONS;
 
   const discovered: ProjectFile[] = [];
+  // tsconfig outDirs seen so far; a parent is always walked before its children.
+  const outDirectories = new Set<string>();
   const walk = async (directory: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
+    // dist/ and build/ are build output only beside a package root (the
+    // project root counts as one) or where tsconfig's outDir says so.
+    const isPackageRoot =
+      directory === projectRoot || entries.some((entry) => entry.isFile() && PACKAGE_ROOT_MARKERS.has(entry.name));
+    const outDirectory = configuredOutDirectory(directory);
+    if (outDirectory && outDirectory !== path.resolve(directory)) outDirectories.add(outDirectory);
     for (const entry of entries) {
       const fullPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         if (
           entry.name.startsWith(".") ||
           EXCLUDED_DIRECTORIES.has(entry.name) ||
-          EXCLUDED_DIRECTORY_SUFFIXES.some((suffix) => entry.name.endsWith(suffix))
+          EXCLUDED_DIRECTORY_SUFFIXES.some((suffix) => entry.name.endsWith(suffix)) ||
+          (isPackageRoot && BUILD_OUTPUT_NAMES.has(entry.name)) ||
+          outDirectories.has(path.resolve(fullPath)) ||
+          (await isPythonVirtualenv(fullPath, await readdir(fullPath, { withFileTypes: true })))
         ) continue;
         await walk(fullPath);
         continue;
