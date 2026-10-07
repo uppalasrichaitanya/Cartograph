@@ -124,5 +124,10 @@ test("the caller's abort signal reaches the GitHub download", async () => {
     ),
     /stop here/,
   );
-  assert.equal(received, controller.signal);
+  // The download gets a signal combined with the time budget's, so it follows
+  // the caller's: aborting the caller's signal aborts the one it received.
+  assert.ok(received);
+  assert.equal(received.aborted, false);
+  controller.abort();
+  assert.equal(received.aborted, true);
 });

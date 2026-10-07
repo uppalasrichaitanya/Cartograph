@@ -40,6 +40,23 @@ export type ProgressReporter = (phase: ProgressPhase, detail: string) => void | 
 
 export class AnalysisError extends Error {}
 
+/**
+ * Overall wall-clock budget for one analysis. The route's maxDuration is 300 s;
+ * stopping at 240 s leaves time to send a readable error event before the
+ * platform kills the function, instead of the stream just going dead.
+ */
+export const ANALYSIS_BUDGET_MS = 240_000;
+
+/** The analysis ran out of its time budget. The message is safe to show. */
+export class AnalysisTimeoutError extends AnalysisError {
+  constructor() {
+    super(
+      "This repository took too long to analyse. Try a smaller repository, or zip just the subfolder you care about and upload that instead.",
+    );
+    this.name = "AnalysisTimeoutError";
+  }
+}
+
 type CommonAnalysisOptions = {
   repoName?: string;
   repoSizeBytes?: number;
@@ -60,12 +77,50 @@ export type AnalysisDeps = {
   downloadGithubArchive?: typeof downloadGithubArchive;
   /** Aborts an in-flight GitHub download, e.g. when the client cancels. */
   signal?: AbortSignal;
+  /** Overall time budget in milliseconds; defaults to ANALYSIS_BUDGET_MS. */
+  budgetMs?: number;
 };
 
+/**
+ * Runs an analysis under an overall time budget. When the budget runs out the
+ * returned promise rejects with AnalysisTimeoutError straight away (even if a
+ * download or storage call is stuck), the in-flight download is aborted, and
+ * the abandoned run is stopped at its next phase boundary so it can never
+ * persist a result after the caller was told it failed.
+ */
 export async function analyzeRepository(
   optionsOrPath: string | AnalysisOptions,
   report: ProgressReporter = () => {},
   deps: AnalysisDeps = {},
+): Promise<AnalysisResult & { ownerToken: string }> {
+  const budget = new AbortController();
+  let expired = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      expired = true;
+      budget.abort();
+      reject(new AnalysisTimeoutError());
+    }, deps.budgetMs ?? ANALYSIS_BUDGET_MS);
+  });
+  const signal = deps.signal ? AbortSignal.any([deps.signal, budget.signal]) : budget.signal;
+  const checkBudget = () => {
+    if (expired) throw new AnalysisTimeoutError();
+  };
+  const run = runAnalysis(optionsOrPath, report, { ...deps, signal }, checkBudget);
+  run.catch(() => {}); // an abandoned run's late failure is not an unhandled rejection
+  try {
+    return await Promise.race([run, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runAnalysis(
+  optionsOrPath: string | AnalysisOptions,
+  report: ProgressReporter,
+  deps: AnalysisDeps,
+  checkBudget: () => void,
 ): Promise<AnalysisResult & { ownerToken: string }> {
   const options: AnalysisOptions =
     typeof optionsOrPath === "string" ? { zipPath: optionsOrPath } : optionsOrPath;
@@ -128,6 +183,7 @@ export async function analyzeRepository(
     // The event log captures path rejections, symlink rejections, and
     // content-unreadable events during extraction.
     await safeUnzip(localZipPath, extractionDirectory, undefined, eventLog);
+    checkBudget();
 
     const projectRoot = await findProjectRoot(extractionDirectory);
 
@@ -167,6 +223,7 @@ export async function analyzeRepository(
     } finally {
       registry.disposeAll();
     }
+    checkBudget();
 
     const { files, parseErrors } = toLegacyResult(parserExtractionResult);
     if (files.length === 0) throw new AnalysisError("No source files could be parsed successfully.");
@@ -236,6 +293,7 @@ export async function analyzeRepository(
     }
     const analysisViews = analyzerRuns.map(toAnalysisView);
 
+    checkBudget();
     await report("layout", "Computing a readable diagram layout");
     const renderData = await prepareRenderData(
       graph,
@@ -245,6 +303,7 @@ export async function analyzeRepository(
       architectureModel,
     );
 
+    checkBudget();
     const detectedMeta = await detectRepoMeta(projectRoot, graph, clusters, repoName, repoSizeBytes);
     const repoMeta = github
       ? { ...detectedMeta, source: { kind: "github" as const, url: githubRepoUrl(github) } }
@@ -271,6 +330,7 @@ export async function analyzeRepository(
       ...(architectureModel ? { architectureModel } : {}),
       ...(architectureInferences ? { architectureInferences } : {}),
     };
+    checkBudget();
     await report("persisting", "Saving the shareable diagram");
     await storage.saveAnalysis(result);
     const ownerToken = createOwnerToken();
