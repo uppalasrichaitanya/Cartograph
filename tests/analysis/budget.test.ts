@@ -72,3 +72,35 @@ test("an analysis within budget is unaffected", async () => {
   await getStorage().deleteAnalysis(result.id);
   assert.equal(result.graph.nodes.length, 1);
 });
+
+test("if the budget expires while the result is being saved, the saved analysis is deleted", async () => {
+  const { getStorage } = await import("@/lib/storage");
+  const storage = getStorage();
+  const original = storage.saveAnalysis.bind(storage);
+  let savedId = "";
+  let release: () => void = () => {};
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  storage.saveAnalysis = async (result) => {
+    savedId = result.id;
+    await released; // held open until the budget has expired
+    await original(result);
+  };
+  try {
+    await assert.rejects(
+      analyzeRepository(
+        { github: source },
+        () => {},
+        { budgetMs: 1200, downloadGithubArchive: async (_s, p) => { tinyZip(p); return { bytes: 10 }; } },
+      ),
+      AnalysisTimeoutError,
+    );
+    // Now let the abandoned run finish its slow save; it must clean up after itself.
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    assert.ok(savedId, "the run reached the persist phase");
+    assert.equal(await storage.loadAnalysis(savedId), null, "no orphaned analysis remains");
+    assert.equal(await storage.loadOwner(savedId), null, "no orphaned owner record remains");
+  } finally {
+    storage.saveAnalysis = original;
+  }
+});

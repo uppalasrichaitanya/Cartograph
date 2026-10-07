@@ -332,10 +332,23 @@ async function runAnalysis(
     };
     checkBudget();
     await report("persisting", "Saving the shareable diagram");
+    // The caller was already told this run failed if the budget expired while
+    // a (slow) save was in flight, and it never received an owner token. A
+    // result saved after that would be public and unowned, so remove it.
+    const discardIfExpired = async () => {
+      try {
+        checkBudget();
+      } catch (error) {
+        await storage.deleteAnalysis(id).catch(() => {});
+        throw error;
+      }
+    };
     await storage.saveAnalysis(result);
+    await discardIfExpired();
     const ownerToken = createOwnerToken();
     await storage.saveOwner(id, { tokenHash: hashOwnerToken(ownerToken), createdAt });
     if (expiry) await storage.markExpiry(id, expiry);
+    await discardIfExpired();
     // The token is returned once and never persisted: the stored analysis is public.
     return { ...result, ownerToken };
   } finally {
