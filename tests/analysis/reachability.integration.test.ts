@@ -92,3 +92,54 @@ test("Python and Go conventions feed the entry points", async () => {
     await getStorage().deleteAnalysis(result.id);
   }
 });
+
+test("an axios-shaped package: wildcard exports seed nothing, the browser map and main do, BFS covers the rest", async () => {
+  const result = await analyse({
+    "package.json": JSON.stringify({
+      name: "lib",
+      main: "index.js",
+      exports: { ".": "./index.js", "./unsafe/*": "./lib/*" },
+      browser: { "./lib/node.js": "./lib/browser.js" },
+    }),
+    "index.js": 'const core = require("./lib/core.js");\nmodule.exports = core;\n',
+    "lib/core.js": 'module.exports = require("./util.js");\n',
+    "lib/util.js": "module.exports = 1;\n",
+    "lib/node.js": "module.exports = 'node';\n",
+    "lib/browser.js": "module.exports = 'browser';\n",
+    "lib/orphan.js": "module.exports = 0;\n",
+    // Dynamic imports in tests and examples cannot hide a library path.
+    "test/dyn.test.js": "const load = (n) => import(n);\n",
+    "examples/dyn.js": "const load = (n) => require(n);\n",
+  });
+  try {
+    const reach = result.reachability!;
+    assert.deepEqual(reach.unreachable, ["lib/orphan.js"]);
+    const reasons = Object.fromEntries(reach.entryPoints.map((e) => [e.path, e.reason]));
+    assert.equal(reasons["lib/node.js"], 'package.json "browser" map');
+    assert.equal(reasons["lib/browser.js"], 'package.json "browser" map');
+    assert.equal(reasons["index.js"], 'package.json "main"');
+    assert.equal(reasons["lib/core.js"], undefined, "reached by search, not seeded");
+    assert.equal(reasons["lib/orphan.js"], undefined, "a wildcard export does not seed it");
+    assert.equal(reach.caveats.length, 1);
+    assert.ok(reach.caveats[0].includes('exports "./unsafe/*" exposes lib/* to consumers'));
+  } finally {
+    await getStorage().deleteAnalysis(result.id);
+  }
+});
+
+test("reachability failing never fails the analysis", async () => {
+  const reachability = await import("@/lib/analysis/repositoryReachability");
+  const original = reachability.reachabilityHooks.analyze;
+  reachability.reachabilityHooks.analyze = async () => { throw new Error("boom"); };
+  try {
+    const result = await analyse({ "index.ts": "export const a = 1;\n" });
+    try {
+      assert.equal(result.reachability, undefined);
+      assert.equal(result.graph.nodes.length, 1);
+    } finally {
+      await getStorage().deleteAnalysis(result.id);
+    }
+  } finally {
+    reachability.reachabilityHooks.analyze = original;
+  }
+});
