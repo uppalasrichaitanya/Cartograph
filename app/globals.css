@@ -1326,7 +1326,6 @@ h1, h2, h3, p { margin-top: 0; }
   letter-spacing: var(--track-micro);
   text-transform: uppercase;
 }
-.tour-card.is-ai .tour-source { color: var(--assisted); }
 .tour-count { color: var(--focus-deep); white-space: nowrap; }
 .tour-progress { display: flex; gap: 3px; margin: var(--space-2) 0; padding: 0; list-style: none; }
 .tour-progress li { flex: 1; height: 3px; background: var(--rule); border-radius: 2px; }

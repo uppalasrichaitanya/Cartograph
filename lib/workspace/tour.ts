@@ -24,8 +24,6 @@ export type TourStep = {
 export const MAX_TOUR_STEPS = 7;
 /** An AI tour is the model's own list; bounded so a long one stays a tour. */
 const MAX_AI_STEPS = 10;
-/** Entry points to open with. */
-const MAX_ENTRY_STEPS = 2;
 /** Most-imported files before region representatives fill the rest. */
 const MAX_HUB_STEPS = 4;
 /** A region needs this many files to earn a representative of its own. */
