@@ -56,7 +56,7 @@ function edgeEnds(id: string): [string, string] | null {
 }
 
 /** Models sometimes use `code` and **bold** despite being asked for plain text. Render just those two. */
-function InlineText({ text }: { text: string }) {
+export function InlineText({ text }: { text: string }) {
   return (
     <>
       {text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g).map((part, index) =>
@@ -84,6 +84,8 @@ export function AiExplanationPanel({
   onClose,
   onNavigateToFile,
   onNavigateToRegion,
+  onOverviewLoaded,
+  onStartTour,
 }: {
   analysisId: string;
   file: GraphNode | null;
@@ -91,6 +93,10 @@ export function AiExplanationPanel({
   onClose: () => void;
   onNavigateToFile: (id: string) => void;
   onNavigateToRegion: (region: string) => void;
+  /** Called with the overview's reading order when it arrives, so a tour can use it without another request. */
+  onOverviewLoaded?: (readingOrder: ReadonlyArray<{ id: string; reason: string }> | undefined) => void;
+  /** Starts the guided tour from this overview's reading order. */
+  onStartTour?: () => void;
 }) {
   const subject: Subject = file ? { kind: "file", id: file.id } : region ? { kind: "region", id: region } : { kind: "overview" };
   const key = subjectKey(subject);
@@ -122,6 +128,7 @@ export function AiExplanationPanel({
       const payload = (await response.json()) as AiResult & { error?: string };
       if (!response.ok) throw new Error(payload.error || "AI explanation failed.");
       setResults((current) => ({ ...current, [requestKey]: payload }));
+      if (requestKey === "overview") onOverviewLoaded?.(payload.readingOrder);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "AI explanation failed.";
       setErrors((current) => ({ ...current, [requestKey]: message }));
@@ -223,6 +230,9 @@ export function AiExplanationPanel({
                   </li>
                 ))}
               </ol>
+              {subject.kind === "overview" && onStartTour && result.readingOrder.length > 1 && (
+                <button type="button" className="quick-action" onClick={onStartTour}>Take the tour</button>
+              )}
             </section>
           )}
 
