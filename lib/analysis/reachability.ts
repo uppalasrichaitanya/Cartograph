@@ -22,6 +22,8 @@ export type ReachabilitySignals = {
   unresolvedInternalImports: number;
   /** File-routed frameworks in use whose conventions are not recognised, with the package directory using each ("" for the project root). */
   unrecognisedFrameworks: { name: string; root: string }[];
+  /** Package exports patterns with a wildcard: public API the search does not seed. */
+  wildcardExports?: { key: string; target: string }[];
 };
 
 const NO_SIGNALS: ReachabilitySignals = { dynamicImportFiles: 0, unresolvedInternalImports: 0, unrecognisedFrameworks: [] };
@@ -99,23 +101,28 @@ export function computeReachability(input: {
     .sort();
 
   const caveats: string[] = [];
+  // Caveats about what could hide an import path say nothing when no file is listed.
+  const hidden: string[] = [];
   if (signals.dynamicImportFiles > 0) {
-    caveats.push(
+    hidden.push(
       `${signals.dynamicImportFiles} ${signals.dynamicImportFiles === 1 ? "file uses" : "files use"} dynamic or non-literal imports, which name no file the analysis can follow, so some files listed may be loaded that way.`,
     );
   }
   if (signals.unresolvedInternalImports > 0) {
     const n = signals.unresolvedInternalImports;
-    caveats.push(`${n} internal ${n === 1 ? "import" : "imports"} could not be resolved to a file, so a path through ${n === 1 ? "it" : "them"} may be missing.`);
+    hidden.push(`${n} internal ${n === 1 ? "import" : "imports"} could not be resolved to a file, so a path through ${n === 1 ? "it" : "them"} may be missing.`);
   }
   const rootFrameworks = signals.unrecognisedFrameworks.filter((p) => p.root === "").map((p) => p.name);
   if (rootFrameworks.length > 0) {
-    caveats.push(
+    hidden.push(
       `This repository uses ${rootFrameworks.join(", ")}, whose file conventions are not recognised, so files it loads by convention may be listed.`,
     );
   }
   for (const { name, root } of skippedRoots) {
     caveats.push(`${root}/ uses ${name}, whose file conventions are not recognised, so its files are not reported.`);
   }
-  return { version: 1, entryPoints, unreachable, caveats };
+  for (const { key, target } of signals.wildcardExports ?? []) {
+    hidden.push(`package.json exports "${key}" exposes ${target} to consumers, so listed files matching it may be public API.`);
+  }
+  return { version: 1, entryPoints, unreachable, caveats: [...(unreachable.length > 0 ? hidden : []), ...caveats] };
 }

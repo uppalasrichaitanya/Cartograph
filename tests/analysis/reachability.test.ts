@@ -74,7 +74,7 @@ test("reaching a Go file reaches the rest of its package directory", () => {
 });
 
 test("caveats for dynamic imports, unresolved internal imports and unrecognised frameworks", () => {
-  const graph = buildGraph([file("main.ts")]);
+  const graph = buildGraph([file("main.ts"), file("lonely.ts")]);
   const none = computeReachability({ graph, entryPoints: [entry("main.ts")] });
   assert.deepEqual(none.caveats, []);
 
@@ -90,7 +90,7 @@ test("caveats for dynamic imports, unresolved internal imports and unrecognised 
 });
 
 test("wording never states a verdict", () => {
-  const graph = buildGraph([file("main.ts")]);
+  const graph = buildGraph([file("main.ts"), file("lonely.ts")]);
   const result = computeReachability({
     graph,
     entryPoints: [entry("main.ts")],
@@ -129,4 +129,25 @@ test("describeReachability: an entry point, an unreachable file, or nothing", as
   assert.equal(describeReachability(reach, "b.ts"), null);
   assert.equal(describeReachability(undefined, "a.ts"), null);
   assert.equal(describeReachability({ ...reach, entryPoints: [], unreachable: [] }, "x.ts"), null);
+});
+
+
+test("caveats that describe what could hide a path are shown only when something is listed as unreachable", () => {
+  const signals = { dynamicImportFiles: 2, unresolvedInternalImports: 1, unrecognisedFrameworks: [{ name: "Nuxt", root: "" }], wildcardExports: [{ key: "./x/*", target: "lib/*" }] };
+  const clean = computeReachability({ graph: buildGraph([file("main.ts")]), entryPoints: [entry("main.ts")], signals });
+  assert.deepEqual(clean.unreachable, []);
+  assert.deepEqual(clean.caveats, []);
+});
+
+test("a wildcard export becomes a caveat naming the pattern", () => {
+  const graph = buildGraph([file("main.ts"), file("lib/a.ts")]);
+  const result = computeReachability({
+    graph,
+    entryPoints: [entry("main.ts")],
+    signals: { dynamicImportFiles: 0, unresolvedInternalImports: 0, unrecognisedFrameworks: [], wildcardExports: [{ key: "./unsafe/*", target: "lib/*" }] },
+  });
+  assert.deepEqual(result.unreachable, ["lib/a.ts"]);
+  assert.equal(result.caveats.length, 1);
+  assert.ok(result.caveats[0].includes('exports "./unsafe/*" exposes lib/* to consumers'));
+  assert.doesNotMatch(result.caveats[0], /\bdead\b|\bunused\b/i);
 });
