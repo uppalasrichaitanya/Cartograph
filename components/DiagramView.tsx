@@ -56,6 +56,7 @@ import { ExportDialog } from "./ExportDialog";
 import { copyShareLink } from "@/lib/workspace/share";
 import { forgetOwnerToken, loadOwnerToken, saveOwnerToken, takeOwnerFragment } from "@/lib/workspace/ownerToken";
 import { OwnerNotice } from "./OwnerNotice";
+import { buildReachabilityLenses, reachabilityLensFiles } from "@/lib/analysis/reachabilityLenses";
 
 /* ─── Types ─── */
 type FlowNode = Node<RenderNodeData, "architecture">;
@@ -819,17 +820,6 @@ function DiagramInner({
   /* ─── Highlight Modes (Issue 3, 4) ─── */
   const getHighlightedNodeIds = useCallback((): Set<string> | null => {
     if (!highlightMode) return null;
-    // The reachability lenses mean nothing without a search that ran: an
-    // analysis saved before reachability, or one with no recognised entry
-    // point, has nothing to emphasise, and dimming the whole map would claim
-    // otherwise.
-    if (
-      (highlightMode === "entries" || highlightMode === "unreachable") &&
-      (!result.reachability || result.reachability.entryPoints.length === 0)
-    ) {
-      return null;
-    }
-
     // Every observation names FILES. In the region overview the rendered nodes
     // are regions (`folder:lib`), so a file path matches nothing there.
     //
@@ -855,11 +845,13 @@ function DiagramInner({
         for (const orphan of result.anomalies.orphans) files.add(orphan);
         break;
       case "entries":
-        for (const entry of result.reachability?.entryPoints ?? []) files.add(entry.path);
+      case "unreachable": {
+        // Null when no search ran or nothing qualifies: dimming the whole map would claim otherwise.
+        const matched = reachabilityLensFiles(result.reachability, highlightMode);
+        if (!matched) return null;
+        for (const file of matched) files.add(file);
         break;
-      case "unreachable":
-        for (const file of result.reachability?.unreachable ?? []) files.add(file);
-        break;
+      }
       case "dependencies":
         return null; // Dependencies highlights edges, not specific nodes.
     }
@@ -872,6 +864,9 @@ function DiagramInner({
     }
     return ids;
   }, [highlightMode, result.anomalies, result.reachability, result.graph.nodes]);
+
+  // A reachability lens in the URL of an analysis without a search names nothing to show.
+  const lensAvailable = (result.reachability?.entryPoints.length ?? 0) > 0;
 
   /* ─── Apply visual highlight to nodes and edges ─── */
   useEffect(() => {
@@ -1283,33 +1278,7 @@ function DiagramInner({
             target: cycle[0],
           })),
       },
-      ...(result.reachability && result.reachability.entryPoints.length > 0
-        ? [
-            {
-              mode: "entries" as const,
-              label: "Entry points",
-              note: "Where a runtime, framework, test runner or person starts. Each shows the rule that matched.",
-              empty: "No entry points recognised.",
-              limit: 8,
-              items: () =>
-                result.reachability!.entryPoints.map((entry) => ({
-                  id: entry.path,
-                  label: `${entry.path} · ${entry.reason}`,
-                  target: entry.path,
-                })),
-            },
-            {
-              mode: "unreachable" as const,
-              label: "Unreachable from entry points",
-              note: "No import path from any recognised entry point.",
-              empty: "Every file has an import path from an entry point.",
-              caveats: result.reachability.caveats,
-              limit: 8,
-              items: () =>
-                result.reachability!.unreachable.map((file) => ({ id: file, label: file, target: file })),
-            },
-          ]
-        : []),
+      ...buildReachabilityLenses(result.reachability),
     ],
     [result.anomalies, result.reachability],
   );
@@ -1573,7 +1542,7 @@ function DiagramInner({
           )}
         </div>
 
-        {highlightMode && (
+        {highlightMode && (highlightMode !== "entries" && highlightMode !== "unreachable" || lensAvailable) && (
           <div className="lens-active-bar" role="status">
             <span>{HIGHLIGHT_NAMES[highlightMode] ?? highlightMode}</span>
             <button
@@ -1629,6 +1598,7 @@ function DiagramInner({
                         <span
                           className="lens-observation"
                           title={item.label}
+                          aria-label={item.label}
                           role="button"
                           tabIndex={0}
                           onClick={(e) => {
