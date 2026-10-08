@@ -205,3 +205,32 @@ test("results are sorted, de-duplicated and keep the first reason", () => {
   assert.deepEqual(got.map((e) => e.path), ["a.test.js", "index.js"]);
   assert.equal(got.find((e) => e.path === "index.js")?.reason, 'package.json "main"');
 });
+
+test("runnable examples, demos, sandboxes and benchmarks are entries; same names deeper in are not", () => {
+  const tree = {
+    "package.json": "{}",
+    "examples/mvc/db.js": "", "example/a.js": "", "demo/b.ts": "", "sandbox/server.js": "", "benchmarks/run.ts": "", "playground/p.ts": "",
+    "lib/examples/x.js": "",
+  };
+  const got = paths(tree);
+  for (const p of ["examples/mvc/db.js", "example/a.js", "demo/b.ts", "sandbox/server.js", "benchmarks/run.ts", "playground/p.ts"]) assert.ok(got.includes(p), p);
+  assert.ok(!got.includes("lib/examples/x.js"));
+  assert.equal(reasonOf(tree, "examples/mvc/db.js"), "example or demo (examples/)");
+  assert.equal(reasonOf(tree, "benchmarks/run.ts"), "benchmark (benchmarks/)");
+});
+
+test("e2e, cypress and __mocks__ are test entries", () => {
+  const got = paths({ "e2e/a.ts": "", "cypress/b.ts": "", "src/__mocks__/c.ts": "", "src/e2e/d.ts": "" });
+  for (const p of ["e2e/a.ts", "cypress/b.ts", "src/__mocks__/c.ts"]) assert.ok(got.includes(p), p);
+  assert.ok(!got.includes("src/e2e/d.ts"));
+});
+
+test("task runner and tool config files at a package root", () => {
+  const tree = {
+    "package.json": "{}", "gulpfile.js": "", "Gruntfile.js": "", "karma.conf.js": "", "gatsby-config.js": "", "gatsby-node.js": "", "jest.setup.ts": "",
+    "src/gulpfile.js": "",
+  };
+  const got = paths(tree);
+  for (const p of ["gulpfile.js", "Gruntfile.js", "karma.conf.js", "gatsby-config.js", "gatsby-node.js", "jest.setup.ts"]) assert.ok(got.includes(p), p);
+  assert.ok(!got.includes("src/gulpfile.js"));
+});

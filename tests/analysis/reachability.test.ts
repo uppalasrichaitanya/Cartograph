@@ -81,7 +81,7 @@ test("caveats for dynamic imports, unresolved internal imports and unrecognised 
   const result = computeReachability({
     graph,
     entryPoints: [entry("main.ts")],
-    signals: { dynamicImportFiles: 2, unresolvedInternalImports: 3, unrecognisedFrameworks: ["Nuxt"] },
+    signals: { dynamicImportFiles: 2, unresolvedInternalImports: 3, unrecognisedFrameworks: [{ name: "Nuxt", root: "" }] },
   });
   assert.equal(result.caveats.length, 3);
   assert.match(result.caveats[0], /2 files use dynamic or non-literal imports/);
@@ -94,7 +94,24 @@ test("wording never states a verdict", () => {
   const result = computeReachability({
     graph,
     entryPoints: [entry("main.ts")],
-    signals: { dynamicImportFiles: 1, unresolvedInternalImports: 1, unrecognisedFrameworks: ["Nuxt"] },
+    signals: { dynamicImportFiles: 1, unresolvedInternalImports: 1, unrecognisedFrameworks: [{ name: "Nuxt", root: "" }] },
   });
   for (const caveat of result.caveats) assert.doesNotMatch(caveat, /\bdead\b|\bunused\b/i);
+});
+
+test("a nested package on an unrecognised framework is not evaluated; a root-level one only adds a caveat", () => {
+  const graph = buildGraph([file("main.ts"), file("lonely.ts"), file("website/components/a.js"), file("website/b.js")]);
+  const result = computeReachability({
+    graph,
+    entryPoints: [entry("main.ts")],
+    signals: {
+      dynamicImportFiles: 0,
+      unresolvedInternalImports: 0,
+      unrecognisedFrameworks: [{ name: "Gatsby", root: "website" }, { name: "VitePress", root: "" }],
+    },
+  });
+  assert.deepEqual(result.unreachable, ["lonely.ts"]);
+  assert.equal(result.caveats.length, 2);
+  assert.ok(result.caveats.some((c) => /website\/ uses Gatsby.*not reported/.test(c)));
+  assert.ok(result.caveats.some((c) => /VitePress/.test(c) && !/not reported/.test(c)));
 });

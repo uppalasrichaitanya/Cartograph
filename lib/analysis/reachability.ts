@@ -20,8 +20,8 @@ export type ReachabilitySignals = {
   dynamicImportFiles: number;
   /** Internal imports that could not be resolved to a file. */
   unresolvedInternalImports: number;
-  /** File-routed frameworks in use whose conventions are not recognised. */
-  unrecognisedFrameworks: string[];
+  /** File-routed frameworks in use whose conventions are not recognised, with the package directory using each ("" for the project root). */
+  unrecognisedFrameworks: { name: string; root: string }[];
 };
 
 const NO_SIGNALS: ReachabilitySignals = { dynamicImportFiles: 0, unresolvedInternalImports: 0, unrecognisedFrameworks: [] };
@@ -74,9 +74,17 @@ export function computeReachability(input: {
     }
   }
 
+  // A nested package on a framework whose conventions are unknown loads most of
+  // its files by convention, so its files are not evaluated at all.
+  const skippedRoots = signals.unrecognisedFrameworks.filter((p) => p.root !== "");
   const unreachable = graph.nodes
     .map((node) => node.path)
-    .filter((path) => !reached.has(path) && !/\.d\.[cm]?ts$/.test(path))
+    .filter(
+      (path) =>
+        !reached.has(path) &&
+        !/\.d\.[cm]?ts$/.test(path) &&
+        !skippedRoots.some((skipped) => path.startsWith(`${skipped.root}/`)),
+    )
     .sort();
 
   const caveats: string[] = [];
@@ -89,10 +97,14 @@ export function computeReachability(input: {
     const n = signals.unresolvedInternalImports;
     caveats.push(`${n} internal ${n === 1 ? "import" : "imports"} could not be resolved to a file, so a path through ${n === 1 ? "it" : "them"} may be missing.`);
   }
-  if (signals.unrecognisedFrameworks.length > 0) {
+  const rootFrameworks = signals.unrecognisedFrameworks.filter((p) => p.root === "").map((p) => p.name);
+  if (rootFrameworks.length > 0) {
     caveats.push(
-      `This repository uses ${signals.unrecognisedFrameworks.join(", ")}, whose file conventions are not recognised, so files it loads by convention may be listed.`,
+      `This repository uses ${rootFrameworks.join(", ")}, whose file conventions are not recognised, so files it loads by convention may be listed.`,
     );
+  }
+  for (const { name, root } of skippedRoots) {
+    caveats.push(`${root}/ uses ${name}, whose file conventions are not recognised, so its files are not reported.`);
   }
   return { version: 1, entryPoints, unreachable, caveats };
 }

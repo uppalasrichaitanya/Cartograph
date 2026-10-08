@@ -30,7 +30,12 @@ const NEXT_SPECIAL =
 const NEXT_APP = new RegExp(`^(?:src/)?app/(?:.*/)?${NEXT_SPECIAL}\\.${SOURCE_EXT}$`);
 const NEXT_PAGES = new RegExp(`^(?:src/)?pages/.+\\.${SOURCE_EXT}$`);
 const NEXT_ROOT = new RegExp(`^(?:src/)?(middleware|proxy|instrumentation)\\.${SOURCE_EXT}$`);
-const CONFIG_FILE = new RegExp(`^[^/]+\\.config\\.${SOURCE_EXT}$`);
+const CONFIG_FILE = new RegExp(
+  `^(?:[^/]+\\.(?:config|conf)|gulpfile|Gruntfile|gatsby-(?:browser|config|node|ssr)|jest\\.setup|vitest\\.setup|setupTests)\\.${SOURCE_EXT}$`,
+);
+/** Folders of runnable programs at a package root: nothing is expected to import them. */
+const DEMO_DIR = /^(?:examples?|demos?|samples?|sandbox|playground)\//;
+const BENCHMARK_DIR = /^(?:benchmarks?|bench)\//;
 const CONVENTIONAL_ROOT = /^(?:src\/)?(?:index|main|server|app|cli|worker|sw)\.[A-Za-z]+$/;
 const PY_ENTRY_NAMES = new Set(["__main__.py", "manage.py", "setup.py", "wsgi.py", "asgi.py"]);
 const PY_MAIN_GUARD = /^if\s+__name__\s*==\s*["']__main__["']\s*:/m;
@@ -87,13 +92,15 @@ export function findEntryPoints(input: EntryPointInput): EntryPoint[] {
       if (NEXT_APP.test(rel) || NEXT_PAGES.test(rel)) add(file, `Next.js route (${file})`);
       else if (NEXT_ROOT.test(rel)) add(file, `Next.js ${rel.match(NEXT_ROOT)![1]} (${file})`);
       else if (CONFIG_FILE.test(rel)) add(file, "config file");
-      else if (/^(?:test|tests)\//.test(rel)) add(file, "test file");
+      else if (/^(?:test|tests|e2e|cypress)\//.test(rel)) add(file, "test file");
+      else if (DEMO_DIR.test(rel)) add(file, `example or demo (${rel.split("/")[0]}/)`);
+      else if (BENCHMARK_DIR.test(rel)) add(file, `benchmark (${rel.split("/")[0]}/)`);
       else if (/^(?:scripts|bin)\//.test(rel)) add(file, `script (${rel.split("/")[0]}/)`);
       else if (CONVENTIONAL_ROOT.test(rel)) add(file, "conventional root file");
     }
 
     // 3. Tests and stories anywhere.
-    if (/\.(?:test|spec)\.[^/]+$/.test(file) || /(?:^|\/)__tests__\//.test(file)) add(file, "test file");
+    if (/\.(?:test|spec)\.[^/]+$/.test(file) || /(?:^|\/)(?:__tests__|__mocks__)\//.test(file)) add(file, "test file");
     else if (/\.stories\.[^/]+$/.test(file)) add(file, "Storybook story");
     else if (/(?:^|\/)test_[^/]*\.py$/.test(file) || /_test\.py$/.test(file) || /(?:^|\/)conftest\.py$/.test(file)) add(file, "test file");
     else if (/_test\.go$/.test(file)) add(file, "test file");
