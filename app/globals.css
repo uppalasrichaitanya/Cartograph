@@ -1293,6 +1293,7 @@ h1, h2, h3, p { margin-top: 0; }
   font-weight: 500;
 }
 .tour-start:hover { color: var(--surface); background: var(--focus-deep); }
+.map-region:focus { outline: none; }
 .map-region {
   --tour-free: calc(100% - var(--panel-width) - var(--space-4));
 }
@@ -1354,8 +1355,22 @@ h1, h2, h3, p { margin-top: 0; }
 .tour-exit:hover { color: var(--focus-deep); text-decoration: underline; }
 .tour-exit kbd { margin-left: var(--space-1); padding: 0 4px; border: 1px solid var(--rule); border-radius: 3px; font-size: var(--text-micro); }
 @media (max-width: 900px) {
-  /* Too narrow to share the row with the inspector: the card spans the map. */
-  .tour-card { left: var(--space-3); right: var(--space-3); width: auto; transform: none; animation: none; }
+  /* Too narrow to share the row with the inspector: the card spans the bottom
+   * of the window above everything else, and the inspector gives it the room
+   * for as long as a tour runs. */
+  .tour-card {
+    position: fixed;
+    z-index: 12;
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: var(--space-3);
+    width: auto;
+    max-height: 15rem;
+    overflow: auto;
+    transform: none;
+    animation: none;
+  }
+  body:has(.tour-card) { --tour-reserve: 15.5rem; }
 }
 
 /* ─── The Trail ────────────────────────────────────────────────────────
@@ -1931,7 +1946,8 @@ h1, h2, h3, p { margin-top: 0; }
   z-index: 10;
   top: calc(var(--rail-height) + var(--space-4));
   right: var(--space-4);
-  bottom: var(--space-4);
+  /* A running tour on a narrow screen reserves the bottom for its card. */
+  bottom: calc(var(--space-4) + var(--tour-reserve, 0px));
   width: min(var(--panel-width), calc(100vw - var(--space-6)));
   padding: var(--space-5);
   overflow: auto;
