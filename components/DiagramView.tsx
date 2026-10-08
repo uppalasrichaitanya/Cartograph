@@ -71,7 +71,14 @@ type FlowNode = Node<RenderNodeData, "architecture">;
  * what it shows without judging it. It is not currently offered in the lens
  * list, but a link minted while it was still reachable should still resolve.
  */
-type HighlightMode = "cycles" | "hubs" | "orphans" | "dependencies" | null;
+type HighlightMode =
+  | "cycles"
+  | "hubs"
+  | "orphans"
+  | "dependencies"
+  | "entries"
+  | "unreachable"
+  | null;
 
 /* ─── Architecture Node ─── */
 /**
@@ -812,6 +819,16 @@ function DiagramInner({
   /* ─── Highlight Modes (Issue 3, 4) ─── */
   const getHighlightedNodeIds = useCallback((): Set<string> | null => {
     if (!highlightMode) return null;
+    // The reachability lenses mean nothing without a search that ran: an
+    // analysis saved before reachability, or one with no recognised entry
+    // point, has nothing to emphasise, and dimming the whole map would claim
+    // otherwise.
+    if (
+      (highlightMode === "entries" || highlightMode === "unreachable") &&
+      (!result.reachability || result.reachability.entryPoints.length === 0)
+    ) {
+      return null;
+    }
 
     // Every observation names FILES. In the region overview the rendered nodes
     // are regions (`folder:lib`), so a file path matches nothing there.
@@ -837,6 +854,12 @@ function DiagramInner({
       case "orphans":
         for (const orphan of result.anomalies.orphans) files.add(orphan);
         break;
+      case "entries":
+        for (const entry of result.reachability?.entryPoints ?? []) files.add(entry.path);
+        break;
+      case "unreachable":
+        for (const file of result.reachability?.unreachable ?? []) files.add(file);
+        break;
       case "dependencies":
         return null; // Dependencies highlights edges, not specific nodes.
     }
@@ -848,7 +871,7 @@ function DiagramInner({
       if (files.has(node.id)) ids.add(`folder:${node.folder}`);
     }
     return ids;
-  }, [highlightMode, result.anomalies, result.graph.nodes]);
+  }, [highlightMode, result.anomalies, result.reachability, result.graph.nodes]);
 
   /* ─── Apply visual highlight to nodes and edges ─── */
   useEffect(() => {
@@ -1185,6 +1208,8 @@ function DiagramInner({
     orphans: "Not imported anywhere",
     cycles: "Import cycles",
     dependencies: "All dependencies",
+    entries: "Entry points",
+    unreachable: "Unreachable from entry points",
   };
 
   /* ─── Observation lenses ───
@@ -1213,6 +1238,10 @@ function DiagramInner({
     /** What was measured, in plain language. Shown under the label. */
     note: string;
     empty: string;
+    /** Quiet notes on how far the measurement can be trusted. */
+    caveats?: ReadonlyArray<string>;
+    /** How many items the popover lists before pointing at the map. Defaults to 3. */
+    limit?: number;
     items: () => ReadonlyArray<{ id: string; label: string; target: string }>;
   }> = useMemo(
     () => [
@@ -1254,8 +1283,35 @@ function DiagramInner({
             target: cycle[0],
           })),
       },
+      ...(result.reachability && result.reachability.entryPoints.length > 0
+        ? [
+            {
+              mode: "entries" as const,
+              label: "Entry points",
+              note: "Where a runtime, framework, test runner or person starts. Each shows the rule that matched.",
+              empty: "No entry points recognised.",
+              limit: 8,
+              items: () =>
+                result.reachability!.entryPoints.map((entry) => ({
+                  id: entry.path,
+                  label: `${entry.path} · ${entry.reason}`,
+                  target: entry.path,
+                })),
+            },
+            {
+              mode: "unreachable" as const,
+              label: "Unreachable from entry points",
+              note: "No import path from any recognised entry point.",
+              empty: "Every file has an import path from an entry point.",
+              caveats: result.reachability.caveats,
+              limit: 8,
+              items: () =>
+                result.reachability!.unreachable.map((file) => ({ id: file, label: file, target: file })),
+            },
+          ]
+        : []),
     ],
-    [result.anomalies],
+    [result.anomalies, result.reachability],
   );
 
   /* No summed observation count.
@@ -1538,6 +1594,11 @@ function DiagramInner({
       {lensMenuOpen && (
         <div className="lens-popover" role="dialog" aria-label="Observations">
           <p className="lens-popover-heading">OBSERVATIONS</p>
+          {result.reachability && result.reachability.entryPoints.length === 0 && (
+            <p className="lens-item-empty lens-popover-notice">
+              {result.reachability.caveats[0]}
+            </p>
+          )}
           {LENSES.map((lens) => {
             const items = lens.items();
             return (
@@ -1556,11 +1617,14 @@ function DiagramInner({
                     a reader can see the basis and disagree with the
                     conclusion. */}
                 <span className="lens-item-note">{lens.note}</span>
+                {lens.caveats?.map((caveat) => (
+                  <span key={caveat} className="lens-item-caveat">{caveat}</span>
+                ))}
                 {items.length === 0 ? (
                   <p className="lens-item-empty">{lens.empty}</p>
                 ) : (
                   <ul className="lens-observations">
-                    {items.slice(0, 3).map((item) => (
+                    {items.slice(0, lens.limit ?? 3).map((item) => (
                       <li key={item.id}>
                         <span
                           className="lens-observation"
@@ -1583,6 +1647,11 @@ function DiagramInner({
                         </span>
                       </li>
                     ))}
+                    {items.length > (lens.limit ?? 3) && (
+                      <li className="lens-item-more">
+                        +{items.length - (lens.limit ?? 3)} more, emphasised on the map
+                      </li>
+                    )}
                   </ul>
                 )}
               </button>
@@ -1619,6 +1688,7 @@ function DiagramInner({
           file={selectedFile}
           graph={result.graph}
           evidence={selectedEvidence}
+          reachability={result.reachability}
           declarations={selectedDeclarations}
           selectedSymbolId={selectedSymbolId}
           onSelectSymbol={setSelectedSymbolId}

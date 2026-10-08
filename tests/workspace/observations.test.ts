@@ -295,3 +295,48 @@ test("Phase 6 — 'not imported anywhere' means exactly that", async (t) => {
     assert.deepEqual(detectAnomalies(graph).orphans, ["a.ts", "b.ts"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Reachability lenses
+// ---------------------------------------------------------------------------
+
+test("Part F — reachability lenses state a measurement, never a verdict", async (t) => {
+  await t.test("both lenses exist with factual labels", () => {
+    assert.match(CODE, /label: "Entry points"/);
+    assert.match(CODE, /label: "Unreachable from entry points"/);
+    assert.match(CODE, /unreachable: "Unreachable from entry points"/);
+    assert.match(CODE, /entries: "Entry points"/);
+  });
+
+  await t.test("the unreachable lens says what was measured", () => {
+    assert.match(CODE, /No import path from any recognised entry point/);
+  });
+
+  await t.test("neither lens says dead or unused", () => {
+    assert.ok(!/\b[Dd]ead\b/.test(CODE));
+    assert.ok(!/\b[Uu]nused\b/.test(CODE));
+  });
+
+  await t.test("the lenses are hidden for analyses saved before reachability", () => {
+    assert.match(CODE, /result\.reachability/);
+  });
+
+  await t.test("the existing orphans lens stays", () => {
+    assert.match(CODE, /label: "Not imported anywhere"/);
+  });
+
+  await t.test("both lenses resolve from the URL", () => {
+    for (const lens of ["entries", "unreachable"]) {
+      const position = parsePosition(new URLSearchParams(`?lens=${lens}`), new Set(), new Set());
+      assert.equal(position.lens, lens);
+    }
+  });
+
+  await t.test("the inspector states the entry point or the lack of a path", () => {
+    const panel = readFileSync(path.join(process.cwd(), "components", "FileDetailPanel.tsx"), "utf8");
+    assert.match(panel, /Entry point: /);
+    assert.match(panel, /Not reachable from any entry point/);
+    const prose = /\/\*[\s\S]*?\*\//g;
+    assert.ok(!/\b[Dd]ead\b|\b[Uu]nused\b/.test(panel.replace(prose, "")));
+  });
+});
