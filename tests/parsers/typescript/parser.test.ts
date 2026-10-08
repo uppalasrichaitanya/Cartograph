@@ -34,7 +34,7 @@ test("TypeScriptParser — properties", async (t) => {
   });
 
   await t.test("declares correct extensions", () => {
-    assert.deepEqual([...parser.extensions], ["ts", "tsx", "js", "jsx"]);
+    assert.deepEqual([...parser.extensions], ["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"]);
   });
 
   await t.test("declares imports capability", () => {
@@ -111,9 +111,8 @@ test("TypeScriptParser — parseFile basics", async (t) => {
     assert.equal(result.path, "lib/util.js");
     assert.equal(result.lineCount, 4);
     assert.deepEqual(result.parseErrors, []);
-    // Only static import/export declarations are captured, not require()
-    assert.ok(result.internalImports.includes("path"));
-    assert.equal(result.internalImports.length, 1);
+    // Static import declarations and literal require() calls are captured
+    assert.deepEqual([...result.internalImports].sort(), ["fs", "path"]);
   });
 
   await t.test("file with no imports → valid RawExtraction with empty imports", () => {

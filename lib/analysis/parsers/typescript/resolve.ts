@@ -11,12 +11,13 @@
  * Responsibilities:
  *   - Read tsconfig.json/jsconfig.json to discover path aliases
  *   - Resolve import specifiers against the alias map and known project files
- *   - Probe extension candidates (.ts, .tsx, .js, .jsx) and index files
+ *   - Probe extension candidates (.ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts), the
+ *     emitted-to-source substitution (x.js -> x.ts) and index files
  *
  * @module lib/analysis/parsers/typescript/resolve
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import type { ParseFileInput, ResolvedSpecifier } from "../interface";
@@ -27,9 +28,27 @@ import type { ParseFileInput, ResolvedSpecifier } from "../interface";
 
 /**
  * Source extensions the TS resolver probes when an import specifier
- * lacks an explicit extension. Order matters for resolution priority.
+ * lacks an explicit extension. Order matters for resolution priority:
+ * the classic four first, then the explicit-module-format variants
+ * (.mjs/.cjs and their TypeScript twins .mts/.cts).
  */
-const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
+const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"];
+
+/**
+ * TypeScript's NodeNext/Bundler convention: an import written against the
+ * *emitted* file name ("./x.js") refers to the source file that emits it
+ * ("./x.ts" / "./x.tsx"). Same for .jsx, .mjs and .cjs. Probed only after
+ * the literal path failed to match a discovered file, so a real "x.js" always
+ * wins over "x.ts". This is a deliberate, conservative choice: tsc itself tries
+ * x.ts before x.js, but it differs only when a compiled x.js is committed next
+ * to its x.ts, and the literal file is what Node would load at runtime.
+ */
+const EMITTED_TO_SOURCE_EXTENSIONS: Record<string, string[]> = {
+  ".js": [".ts", ".tsx"],
+  ".jsx": [".tsx"],
+  ".mjs": [".mts"],
+  ".cjs": [".cts"],
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,8 +101,10 @@ export function readAliasConfig(projectRoot: string): AliasConfig {
 /**
  * Generate candidate filesystem paths for a given import target.
  *
- * Probes the target path with source extensions appended (if it doesn't
- * already have one) and as a directory with index files.
+ * Probes, in Node order: the exact path, the TypeScript source twin of an
+ * emitted extension (x.js -> x.ts, only reached when x.js is not a known
+ * file), the path with source extensions appended (if it doesn't already
+ * have one), and finally the path as a directory with index files.
  *
  * Logic is identical to the legacy `resolveAliases.candidatePaths()`.
  *
@@ -92,8 +113,17 @@ export function readAliasConfig(projectRoot: string): AliasConfig {
  */
 function candidatePaths(candidate: string): string[] {
   const hasSourceExtension = SOURCE_EXTENSIONS.some((extension) => candidate.endsWith(extension));
+  const emittedExtension = Object.keys(EMITTED_TO_SOURCE_EXTENSIONS).find((extension) =>
+    candidate.endsWith(extension),
+  );
+  const sourceTwins = emittedExtension
+    ? EMITTED_TO_SOURCE_EXTENSIONS[emittedExtension].map(
+        (extension) => candidate.slice(0, -emittedExtension.length) + extension,
+      )
+    : [];
   return [
     candidate,
+    ...sourceTwins,
     ...(hasSourceExtension ? [] : SOURCE_EXTENSIONS.map((extension) => `${candidate}${extension}`)),
     ...SOURCE_EXTENSIONS.map((extension) => path.join(candidate, `index${extension}`)),
   ];
@@ -102,6 +132,25 @@ function candidatePaths(candidate: string): string[] {
 // ---------------------------------------------------------------------------
 // Alias Matching
 // ---------------------------------------------------------------------------
+
+/**
+ * Is the relative/absolute target a real file on disk that is simply not
+ * source code (JSON, CSS, an image, ...)? Such a reference is not broken, but
+ * it is not a code dependency either, so it is neither an edge nor an
+ * unresolved-internal reference. Source-extension targets never qualify: a
+ * missing .ts/.js file is genuinely unresolved (or was skipped by discovery).
+ */
+function isExistingNonSourceFile(base: string): boolean {
+  for (const candidate of [base, `${base}.json`]) {
+    if (SOURCE_EXTENSIONS.some((extension) => candidate.endsWith(extension))) continue;
+    try {
+      if (statSync(candidate).isFile()) return true;
+    } catch {
+      // not there
+    }
+  }
+  return false;
+}
 
 /**
  * Match a specifier against a tsconfig path alias pattern.
@@ -211,6 +260,7 @@ export function resolveSpecifier(
       : path.resolve(path.dirname(fromFile.absolutePath), specifier);
     const resolved = lookupCandidate(base, knownFilesMap);
     if (resolved) return { resolved, raw: specifier };
+    if (isExistingNonSourceFile(base)) return { resolved: null, raw: specifier, unresolvedKind: "non-code" };
     // Syntactically internal but no such file — a broken internal reference,
     // not a third-party package.
     return {

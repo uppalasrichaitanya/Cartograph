@@ -83,8 +83,8 @@ function detectLanguage(graph: DependencyGraph): string | null {
   let pyCount = 0;
   for (const node of graph.nodes) {
     const ext = path.extname(node.path).toLowerCase();
-    if (ext === ".ts" || ext === ".tsx") tsCount++;
-    else if (ext === ".js" || ext === ".jsx") jsCount++;
+    if (ext === ".ts" || ext === ".tsx" || ext === ".mts" || ext === ".cts") tsCount++;
+    else if (ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs") jsCount++;
     else if (ext === ".py") pyCount++;
   }
   if (tsCount === 0 && jsCount === 0 && pyCount === 0) return null;

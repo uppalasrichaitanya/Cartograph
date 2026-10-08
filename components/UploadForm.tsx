@@ -6,53 +6,14 @@ import { buildUploadPathname } from "@/lib/storage/uploadPathname";
 import { ProgressStream, type ProgressState } from "./ProgressStream";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 import { saveOwnerToken } from "@/lib/workspace/ownerToken";
+import { consumeAnalysisStream, type StreamMessage } from "@/lib/client/analysisStream";
 import { GithubSourceError, parseGithubSource } from "@/lib/github/source";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 type SourceMode = "zip" | "github";
 
-type StreamMessage =
-  | { type: "progress"; phase: string; detail: string }
-  | { type: "result"; shareUrl: string; ownerToken: string; expiresAt: string | null }
-  | { type: "error"; error: string };
-
-async function consumeAnalysisStream(
-  requestBody: Record<string, unknown>,
-  onProgress: (progress: ProgressState) => void,
-  signal: AbortSignal,
-): Promise<Extract<StreamMessage, { type: "result" }>> {
-  const response = await fetch("/api/analyze/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody),
-    signal,
-  });
-  if (!response.ok || !response.body) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? "Could not start analysis.");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffered = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    buffered += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-    const events = buffered.split("\n\n");
-    buffered = events.pop() ?? "";
-    for (const event of events) {
-      const line = event.split("\n").find((part) => part.startsWith("data: "));
-      if (!line) continue;
-      const message = JSON.parse(line.slice(6)) as StreamMessage;
-      if (message.type === "progress") onProgress({ phase: message.phase, detail: message.detail });
-      if (message.type === "result") return message;
-      if (message.type === "error") throw new Error(message.error);
-    }
-    if (done) break;
-  }
-  throw new Error("The analysis stream ended before a result was returned.");
-}
+type StreamResult = Extract<StreamMessage, { type: "result" }>;
 
 export function UploadForm({ useBlob = false, initialGithub = "" }: { useBlob?: boolean; initialGithub?: string }) {
   const input = useRef<HTMLInputElement>(null);
@@ -86,7 +47,7 @@ export function UploadForm({ useBlob = false, initialGithub = "" }: { useBlob?: 
     resetState();
   }, [resetState]);
 
-  const arriveAtMap = (outcome: Extract<StreamMessage, { type: "result" }>) => {
+  const arriveAtMap = (outcome: StreamResult) => {
     const id = outcome.shareUrl.split("/").pop() ?? "";
     saveOwnerToken(id, outcome.ownerToken);
     // One-time notice on arrival: see OwnerNotice.
@@ -112,7 +73,7 @@ export function UploadForm({ useBlob = false, initialGithub = "" }: { useBlob?: 
     try {
       setProgress({ phase: "validating", detail: "Contacting GitHub" });
       setShowSkeleton(true);
-      const outcome = await consumeAnalysisStream({ github: githubValue.trim(), retention }, setProgress, controller.signal);
+      const outcome = await consumeAnalysisStream({ github: githubValue.trim(), retention }, setProgress, { signal: controller.signal });
       arriveAtMap(outcome);
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") return;
@@ -190,7 +151,7 @@ export function UploadForm({ useBlob = false, initialGithub = "" }: { useBlob?: 
       const repoName = file.name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim() || "Untitled Repository";
       const repoSizeBytes = file.size;
 
-      const outcome = await consumeAnalysisStream({ zipPath: zipRef, repoName, repoSizeBytes, retention }, setProgress, controller.signal);
+      const outcome = await consumeAnalysisStream({ zipPath: zipRef, repoName, repoSizeBytes, retention }, setProgress, { signal: controller.signal });
       arriveAtMap(outcome);
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") {

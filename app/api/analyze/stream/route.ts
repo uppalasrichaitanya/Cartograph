@@ -5,6 +5,15 @@ import { enforceRateLimit, RATE_LIMITS } from "@/lib/safety/rateLimit";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+/**
+ * SSE comment line sent on a timer while a phase runs silently. It keeps
+ * proxies from idling the connection out and lets the client detect a dead
+ * connection or function (it hears nothing). It is not a progress signal: it
+ * keeps flowing while an await is stuck, which the analysis time budget ends.
+ */
+const HEARTBEAT_MS = 10_000;
+const HEARTBEAT = new TextEncoder().encode(": keep-alive\n\n");
+
 type StreamEvent =
   | { type: "progress"; phase: ProgressPhase; detail: string }
   | { type: "result"; shareUrl: string; ownerToken: string; expiresAt: string | null }
@@ -30,6 +39,9 @@ export async function POST(request: Request): Promise<Response> {
 
   const stream = new TransformStream();
   const writer = stream.writable.getWriter();
+  const heartbeat = setInterval(() => {
+    writer.write(HEARTBEAT).catch(() => {});
+  }, HEARTBEAT_MS);
   void (async () => {
     try {
       const result = await analyzeRepository(
@@ -50,7 +62,8 @@ export async function POST(request: Request): Promise<Response> {
         encodeEvent({ type: "error", error: error instanceof Error ? error.message : "Analysis failed." }),
       );
     } finally {
-      await writer.close();
+      clearInterval(heartbeat);
+      await writer.close().catch(() => {});
     }
   })();
 
