@@ -14,6 +14,8 @@ function fixtureZip(): string {
   // picked up by the `node:test` glob in `npm test`.
   zip.addFile("small-repo/tests/jobs.test.ts", Buffer.from('import { runJob } from "../src/core/jobs";\nexport const check = () => runJob();\n'));
   zip.addFile("small-repo/src/legacy/orphan.ts", Buffer.from("export const orphan = 1;\n"));
+  // Imports every other file, so the one orphan is the only file with no import path from an entry point.
+  zip.addFile("small-repo/tests/all.test.ts", Buffer.from(["api/auth", "api/health", "api/routes", "core/log", "ui/theme"].map((p) => 'import "../src/' + p + '";').join("\n") + "\n"));
   const file = path.join(mkdtempSync(path.join(tmpdir(), "cartograph-e2e-")), "small-repo.zip");
   zip.writeZip(file);
   return file;
@@ -71,6 +73,10 @@ test("upload → map → AI → export → delete", async ({ page }) => {
   await page.getByRole("button", { name: "Observations" }).click();
   const observations = page.getByRole("dialog", { name: "Observations" });
   await expect(observations.getByText("No import path from any recognised entry point")).toBeVisible();
+  const unreachableLens = observations.locator(".lens-item").filter({ hasText: "Unreachable from entry points" });
+  await expect(unreachableLens.locator(".lens-item-count")).toHaveText("1");
+  await expect(unreachableLens.getByText("src/legacy/orphan.ts")).toBeVisible();
+  await expect(observations.getByText("test file · 2")).toBeVisible();
   await expect(observations.getByText(/\b(dead|unused)\b/i)).toHaveCount(0);
   await observations.locator(".lens-item-label", { hasText: "Unreachable from entry points" }).click();
   await expect(page).toHaveURL(/lens=unreachable/);
