@@ -65,7 +65,18 @@ function normalise(path: string): string {
   return out.join("/");
 }
 
+/** An exports pattern with a wildcard: reported, never expanded into entry points. */
+export type WildcardExport = { key: string; target: string };
+
 export function findEntryPoints(input: EntryPointInput): EntryPoint[] {
+  return findEntryPointsDetailed(input).entryPoints;
+}
+
+export function findEntryPointsDetailed(input: EntryPointInput): {
+  entryPoints: EntryPoint[];
+  wildcardExports: WildcardExport[];
+} {
+  const wildcardExports: WildcardExport[] = [];
   const fileSet = new Set(input.files.filter((file) => !isDeclarationFile(file)));
   const found = new Map<string, string>();
   const add = (path: string, reason: string) => {
@@ -79,7 +90,7 @@ export function findEntryPoints(input: EntryPointInput): EntryPoint[] {
   // 1. Manifests.
   for (const manifest of input.manifestPaths) {
     const dir = dirOf(manifest);
-    if (manifest.endsWith("package.json")) packageJsonEntries(manifest, dir, input, fileSet, add);
+    if (manifest.endsWith("package.json")) packageJsonEntries(manifest, dir, input, fileSet, add, wildcardExports);
     else if (manifest.endsWith("pyproject.toml")) pyprojectEntries(manifest, dir, input, add);
   }
 
@@ -115,8 +126,11 @@ export function findEntryPoints(input: EntryPointInput): EntryPoint[] {
     }
   }
 
-  return [...found].map(([path, reason]) => ({ path, reason })).sort((a, b) => a.path.localeCompare(b.path));
+  const entryPoints = [...found].map(([path, reason]) => ({ path, reason })).sort((a, b) => a.path.localeCompare(b.path));
+  return { entryPoints, wildcardExports };
 }
+
+const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"];
 
 function packageJsonEntries(
   manifest: string,
@@ -124,6 +138,7 @@ function packageJsonEntries(
   input: EntryPointInput,
   fileSet: ReadonlySet<string>,
   add: (path: string, reason: string) => void,
+  wildcards: WildcardExport[],
 ): void {
   let json: unknown;
   try {
@@ -133,19 +148,62 @@ function packageJsonEntries(
   }
   if (!json || typeof json !== "object") return;
   const pkg = json as Record<string, unknown>;
-  const reasonFor = (field: string) => `${manifest} "${field}"`;
 
-  const fromTargets = (field: string, targets: string[]) => {
-    for (const target of targets) {
-      for (const file of resolveTarget(dir, target, fileSet)) add(file, reasonFor(field));
-    }
+  // Only literal targets seed the search. A wildcard names a family of files
+  // the package makes public, not files known to run, so seeding it would make
+  // an entire directory "reachable" by construction.
+  const seed = (reason: string, target: string) => {
+    if (target.includes("*")) return;
+    for (const file of resolveTarget(dir, target, fileSet)) add(file, reason);
   };
   for (const field of ["main", "module", "types"] as const) {
-    if (typeof pkg[field] === "string") fromTargets(field, [pkg[field] as string]);
+    if (typeof pkg[field] === "string") seed(`${manifest} "${field}"`, pkg[field] as string);
   }
-  if (typeof pkg.bin === "string") fromTargets("bin", [pkg.bin]);
-  else if (pkg.bin && typeof pkg.bin === "object") fromTargets("bin", stringLeaves(pkg.bin));
-  if (pkg.exports !== undefined) fromTargets("exports", stringLeaves(pkg.exports));
+  if (typeof pkg.bin === "string") seed(`${manifest} "bin"`, pkg.bin);
+  else if (pkg.bin && typeof pkg.bin === "object") for (const target of stringLeaves(pkg.bin)) seed(`${manifest} "bin"`, target);
+
+  // The browser field substitutes one file for another: both sides are files a bundler may load.
+  const browserReason = `${manifest} "browser" map`;
+  if (typeof pkg.browser === "string") seed(browserReason, pkg.browser);
+  else if (pkg.browser && typeof pkg.browser === "object") {
+    for (const [from, to] of Object.entries(pkg.browser)) {
+      if (from.startsWith(".")) seed(browserReason, from);
+      if (typeof to === "string" && to.startsWith(".")) seed(browserReason, to);
+    }
+  }
+
+  if (pkg.exports !== undefined) {
+    const leaves: { key: string; target: string }[] = [];
+    const excluded: string[] = [];
+    const walk = (value: unknown, key: string) => {
+      if (typeof value === "string") leaves.push({ key, target: value });
+      else if (value === null) excluded.push(key);
+      else if (Array.isArray(value)) for (const item of value) walk(item, key);
+      else if (value && typeof value === "object") {
+        const entries = Object.entries(value);
+        const isSubpathMap = entries.some(([k]) => k.startsWith("."));
+        for (const [k, v] of entries) walk(v, isSubpathMap ? k : key);
+      }
+    };
+    walk(pkg.exports, ".");
+    const isExcluded = (key: string) => excluded.some((pattern) => keyMatches(pattern, key));
+    for (const { key, target } of leaves) {
+      if (target.startsWith("#") || isExcluded(key)) continue;
+      if (target.includes("*")) {
+        if (!wildcards.some((w) => w.key === key && w.target === join(dir, normalise(target)))) {
+          wildcards.push({ key, target: join(dir, normalise(target)) });
+        }
+      } else {
+        seed(`${manifest} "exports" ("${key}")`, target);
+      }
+    }
+  }
+}
+
+/** An exports key against a (possibly wildcard) pattern key. */
+function keyMatches(pattern: string, key: string): boolean {
+  if (!pattern.includes("*")) return pattern === key;
+  return new RegExp(`^${escapeRegExp(pattern).replace(/\*/g, ".*")}$`).test(key);
 }
 
 function stringLeaves(value: unknown): string[] {
@@ -158,7 +216,9 @@ function stringLeaves(value: unknown): string[] {
 /**
  * Source files a manifest target points at. A target that is not itself a
  * discovered source file is mapped to an obvious twin (dist/x.js -> src/x.ts,
- * lib/x.js -> lib/x.ts); otherwise it names nothing and is ignored.
+ * lib/x.js -> lib/x.ts); an extensionless or directory target is resolved the
+ * way Node does (source extensions, then /index.*); otherwise it names nothing
+ * and is ignored.
  */
 function resolveTarget(dir: string, target: string, fileSet: ReadonlySet<string>): string[] {
   if (isDeclarationFile(target) || target.startsWith("#")) return [];
@@ -175,15 +235,14 @@ function resolveTarget(dir: string, target: string, fileSet: ReadonlySet<string>
     const extIndex = base.lastIndexOf(".");
     const ext = extIndex > base.lastIndexOf("/") ? base.slice(extIndex) : "";
     const stem = ext ? base.slice(0, extIndex) : base;
-    const variants = ext ? (SOURCE_TWINS[ext] ?? [ext]).map((e) => stem + e) : [base];
+    const variants = SOURCE_TWINS[ext]
+      ? SOURCE_TWINS[ext].map((e) => stem + e)
+      : ext && SOURCE_EXTENSIONS.includes(ext)
+        ? [base]
+        : [base, ...SOURCE_EXTENSIONS.map((e) => base + e), ...SOURCE_EXTENSIONS.map((e) => `${base}/index${e}`)];
     for (const variant of variants) {
       const full = join(dir, variant);
-      if (variant.includes("*")) {
-        const pattern = new RegExp(`^${escapeRegExp(full).replace(/\*/g, ".*")}$`);
-        for (const file of fileSet) if (pattern.test(file)) matches.add(file);
-      } else if (fileSet.has(full)) {
-        matches.add(full);
-      }
+      if (fileSet.has(full)) matches.add(full);
     }
   }
   return [...matches];

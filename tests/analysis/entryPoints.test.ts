@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findEntryPoints } from "@/lib/analysis/entryPoints";
+import { findEntryPoints, findEntryPointsDetailed } from "@/lib/analysis/entryPoints";
 
 /** Builds the input from a map of path -> contents. Manifests are the
  *  package.json / pyproject.toml entries; everything else is a source file. */
@@ -46,12 +46,14 @@ test("package.json exports: every string leaf, any condition, nested", () => {
     "esm/index.js": "", "cjs/index.js": "", "x.js": "", "y.js": "",
   };
   assert.deepEqual(paths(tree), ["cjs/index.js", "esm/index.js", "x.js"]);
-  assert.equal(reasonOf(tree, "x.js"), 'package.json "exports"');
+  assert.equal(reasonOf(tree, "x.js"), 'package.json "exports" ("./x")');
 });
 
-test("exports wildcards match source files", () => {
+test("exports wildcards seed nothing: a pattern is reported, never expanded", () => {
   const tree = { "package.json": JSON.stringify({ exports: { "./*": "./src/*.js" } }), "src/a.js": "", "src/b.js": "", "other.js": "" };
-  assert.deepEqual(paths(tree), ["src/a.js", "src/b.js"]);
+  assert.deepEqual(paths(tree), []);
+  const detailed = findEntryPointsDetailed({ files: ["src/a.js", "src/b.js", "other.js"], manifestPaths: ["package.json"], read: () => tree["package.json"] });
+  assert.deepEqual(detailed.wildcardExports, [{ key: "./*", target: "src/*.js" }]);
 });
 
 test("dist/build targets map back to a source twin; unmatched targets are ignored", () => {
@@ -233,4 +235,35 @@ test("task runner and tool config files at a package root", () => {
   const got = paths(tree);
   for (const p of ["gulpfile.js", "Gruntfile.js", "karma.conf.js", "gatsby-config.js", "gatsby-node.js", "jest.setup.ts"]) assert.ok(got.includes(p), p);
   assert.ok(!got.includes("src/gulpfile.js"));
+});
+
+
+test("a literal export beside a wildcard is still seeded, and a null key excludes", () => {
+  const tree = {
+    "package.json": JSON.stringify({ exports: { ".": "./lib/index.js", "./unsafe/*": "./lib/*", "./internal/x": null, "./internal/*": null } }),
+    "lib/index.js": "", "lib/other.js": "",
+  };
+  assert.deepEqual(paths(tree), ["lib/index.js"]);
+  const detailed = findEntryPointsDetailed({ files: Object.keys(tree).filter((p) => p !== "package.json"), manifestPaths: ["package.json"], read: (p) => tree[p as keyof typeof tree] });
+  assert.deepEqual(detailed.wildcardExports, [{ key: "./unsafe/*", target: "lib/*" }]);
+});
+
+test("a literal subpath that a null pattern excludes is not seeded", () => {
+  const tree = { "package.json": JSON.stringify({ exports: { "./internal/*": null, "./internal/secret": "./lib/secret.js", "./ok": "./lib/ok.js" } }), "lib/secret.js": "", "lib/ok.js": "" };
+  assert.deepEqual(paths(tree), ["lib/ok.js"]);
+});
+
+test("package.json browser: a string, or an object map with keys and values", () => {
+  assert.deepEqual(paths({ "package.json": JSON.stringify({ browser: "lib/web.js" }), "lib/web.js": "" }), ["lib/web.js"]);
+  const tree = {
+    "package.json": JSON.stringify({ browser: { "./lib/node.js": "./lib/browser.js", "./lib/other.js": false, "fs": false, "./lib/x.js": "./lib/null.js" } }),
+    "lib/node.js": "", "lib/browser.js": "", "lib/other.js": "", "lib/x.js": "", "lib/null.js": "", "lib/unrelated.js": "",
+  };
+  assert.deepEqual(paths(tree), ["lib/browser.js", "lib/node.js", "lib/null.js", "lib/other.js", "lib/x.js"]);
+  assert.equal(reasonOf(tree, "lib/browser.js"), 'package.json "browser" map');
+});
+
+test("extensionless and directory targets resolve to source files", () => {
+  const tree = { "package.json": JSON.stringify({ main: "lib/index", module: "./esm", bin: "tools/cli" }), "lib/index.ts": "", "esm/index.js": "", "tools/cli.mjs": "", "lib/zzz.ts": "" };
+  assert.deepEqual(paths(tree), ["esm/index.js", "lib/index.ts", "tools/cli.mjs"]);
 });
