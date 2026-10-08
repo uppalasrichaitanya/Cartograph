@@ -296,3 +296,17 @@ test("newcomer path: entries are ordered by tier, then depth, then out-degree", 
   assert.equal(steps[0].id, "src/index.ts");
   assert.equal(steps[1].id, "cli/bin.ts", "one entry per kind, so the second main does not follow");
 });
+
+test("newcomer path: a large folder of leaf files does not outrank a connected region for the last steps", () => {
+  const leaves = Array.from({ length: 8 }, (_, i) => `lib/parsers/p${i}.ts`);
+  const graph = graphOf(["index.ts", "lib/core/a.ts", "lib/core/b.ts", "lib/core/c.ts", ...leaves], [
+    ...fan("index.ts", ["lib/core/a.ts", "lib/core/b.ts", "lib/core/c.ts"]),
+    ...fan("lib/core/a.ts", ["lib/core/b.ts", "lib/core/c.ts"]), ...fan("lib/core/b.ts", ["lib/core/c.ts"]),
+    ...fan("index.ts", leaves.slice(0, 1)),
+  ]);
+  const steps = buildMeasuredTour(graph, reach([["index.ts", "conventional root file"]]));
+  const core = steps.findIndex((s) => s.id.startsWith("lib/core/"));
+  const parsers = steps.findIndex((s) => s.id.startsWith("lib/parsers/"));
+  assert.ok(core >= 0);
+  assert.ok(parsers < 0 || core < parsers);
+});

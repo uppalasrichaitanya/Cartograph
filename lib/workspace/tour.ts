@@ -185,9 +185,12 @@ export function buildMeasuredTour(
     else filesByRegion.set(node.folder, [node.id]);
   }
   const visited = new Set(steps.map((step) => regionOf(step.id)));
+  // Regions whose best file is most connected come first, so a deep parser
+  // folder does not take a step ahead of a core module just for being large.
+  const weight = (files: string[]) => Math.max(0, ...files.filter((path) => !declarationOnly(path)).map((path) => sourceIn(path) + outDeg(path)));
   const regions = [...filesByRegion.entries()]
     .filter(([region, files]) => !visited.has(region) && files.length >= LARGE_REGION_FILES)
-    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    .sort((a, b) => weight(b[1]) - weight(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]));
   for (const [region, files] of regions) {
     if (steps.length >= MAX_TOUR_STEPS) break;
     const best = files
