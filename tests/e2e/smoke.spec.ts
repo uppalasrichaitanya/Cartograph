@@ -72,11 +72,11 @@ test("upload → map → AI → export → delete", async ({ page }) => {
   const observations = page.getByRole("dialog", { name: "Observations" });
   await expect(observations.getByText("No import path from any recognised entry point")).toBeVisible();
   await expect(observations.getByText(/\b(dead|unused)\b/i)).toHaveCount(0);
-  await observations.getByRole("button", { name: /Unreachable from entry points/ }).click();
+  await observations.locator(".lens-item-label", { hasText: "Unreachable from entry points" }).click();
   await expect(page).toHaveURL(/lens=unreachable/);
   await expect(page.locator(".lens-active-bar")).toContainText("Unreachable from entry points");
   // Selecting the lens again turns it off.
-  await observations.getByRole("button", { name: /Unreachable from entry points/ }).click();
+  await observations.locator(".lens-item-label", { hasText: "Unreachable from entry points" }).click();
   await expect(page.locator(".lens-active-bar")).toHaveCount(0);
   await page.getByRole("button", { name: "Observations" }).click(); // close the popover
 
