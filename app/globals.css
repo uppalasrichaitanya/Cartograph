@@ -1258,6 +1258,121 @@ h1, h2, h3, p { margin-top: 0; }
   border-top: 1px solid var(--rule);
 }
 
+/* ─── Guided tour ──────────────────────────────────────────────────────
+ *
+ * A card pinned bottom-centre of the map area that is NOT under the
+ * inspector: the camera centres the selected node in the same area, and the
+ * inspector keeps the right-hand column for the step's evidence. Opaque
+ * paper, hairline rule, mono labels, rust for "this is the subject".
+ * AI-sourced steps carry the assisted tint and a dashed border, the same
+ * vocabulary as the AI controls, so measured and generated read differently.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.tour-start {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  color: var(--focus-deep);
+  background: var(--focus-wash);
+  border: 1px solid var(--focus);
+  border-radius: var(--radius-control);
+  font-family: var(--type-mono);
+  font-size: var(--text-caption);
+  font-weight: 500;
+}
+.tour-start:hover { color: var(--surface); background: var(--focus-deep); }
+.map-region:focus { outline: none; }
+.map-region {
+  --tour-free: calc(100% - var(--panel-width) - var(--space-4));
+}
+.tour-card {
+  position: absolute;
+  z-index: 7;
+  bottom: var(--space-4);
+  left: calc(var(--tour-free) / 2);
+  width: min(30rem, calc(var(--tour-free) - var(--space-6)));
+  transform: translateX(-50%);
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-over);
+  animation: tourIn var(--motion-connective) var(--motion-ease) both;
+}
+.tour-card.is-ai { background: var(--assisted-wash); border-style: dashed; }
+.tour-card:focus-visible { outline-offset: 3px; }
+@keyframes tourIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.tour-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
+.tour-source,
+.tour-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--ink-faint);
+  font-family: var(--type-mono);
+  font-size: var(--text-micro);
+  letter-spacing: var(--track-micro);
+  text-transform: uppercase;
+}
+.tour-count { color: var(--focus-deep); white-space: nowrap; }
+.tour-progress { display: flex; gap: 3px; margin: var(--space-2) 0; padding: 0; list-style: none; }
+.tour-progress li { flex: 1; height: 3px; background: var(--rule); border-radius: 2px; }
+.tour-progress li.is-done { background: var(--rule-strong); }
+.tour-progress li.is-current { background: var(--focus); }
+.tour-file { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); margin: 0; min-width: 0; font-size: var(--text-body); }
+.tour-file-name { font-family: var(--type-mono); font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.tour-file-path { font-family: var(--type-mono); font-size: var(--text-caption); font-weight: 400; color: var(--ink-faint); overflow-wrap: anywhere; }
+.tour-reason { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: var(--text-caption); line-height: 1.5; overflow-wrap: anywhere; }
+.tour-reason code { padding: 0 3px; border-radius: 3px; background: var(--well); font-size: var(--text-caption); }
+.tour-note { margin: var(--space-2) 0 0; color: var(--ink-muted); font-size: var(--text-caption); }
+.tour-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.tour-actions .quick-action:disabled { opacity: .45; cursor: default; }
+.tour-actions .quick-action:disabled:hover { color: var(--ink-muted); border-color: var(--rule); background: var(--surface); }
+.tour-next { color: var(--surface); background: var(--focus); border-color: var(--focus); }
+.tour-next:hover { color: var(--surface); background: var(--focus-deep); border-color: var(--focus-deep); }
+.tour-ai svg { margin-right: 0; }
+.tour-exit {
+  margin-left: auto;
+  padding: var(--space-1) var(--space-1);
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  font-size: var(--text-caption);
+}
+.tour-exit:hover { color: var(--focus-deep); text-decoration: underline; }
+.tour-exit kbd { margin-left: var(--space-1); padding: 0 4px; border: 1px solid var(--rule); border-radius: 3px; font-size: var(--text-micro); }
+@media (max-width: 900px) {
+  /* Too narrow to share the row with the inspector: the card spans the bottom
+   * of the window above everything else, and the inspector gives it the room
+   * for as long as a tour runs. */
+  .tour-card {
+    position: fixed;
+    z-index: 12;
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: var(--space-3);
+    width: auto;
+    max-height: 15rem;
+    overflow: auto;
+    transform: none;
+    animation: none;
+  }
+  body:has(.tour-card) { --tour-reserve: 15.5rem; }
+}
+
 /* ─── The Trail ────────────────────────────────────────────────────────
  *
  * What this investigation has examined, in the order things last mattered.
@@ -1831,7 +1946,8 @@ h1, h2, h3, p { margin-top: 0; }
   z-index: 10;
   top: calc(var(--rail-height) + var(--space-4));
   right: var(--space-4);
-  bottom: var(--space-4);
+  /* A running tour on a narrow screen reserves the bottom for its card. */
+  bottom: calc(var(--space-4) + var(--tour-reserve, 0px));
   width: min(var(--panel-width), calc(100vw - var(--space-6)));
   padding: var(--space-5);
   overflow: auto;
