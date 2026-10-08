@@ -173,7 +173,7 @@ test("a rate-limited provider is tried last until its cooldown passes", async ()
 });
 
 test("region prompts describe regions as folder groups, not top-level folders", () => {
-  assert.equal(EXPLAIN_PROMPT_VERSION, 4);
+  assert.equal(EXPLAIN_PROMPT_VERSION, 5);
   const prompt = buildExplainPrompt(hubResult(), { kind: "region", id: "src" });
   assert.match(prompt.prompt, /a folder group/);
   assert.doesNotMatch(prompt.prompt, /top-level/);
@@ -200,4 +200,17 @@ test("without reachability, or with no recognised entry point, the overview stat
   const none = hubResult();
   none.reachability = { version: 1, entryPoints: [], unreachable: [], caveats: ["No entry points recognised, so reachability was not computed"] };
   assert.doesNotMatch(buildExplainPrompt(none, { kind: "overview" }).prompt, /recognisedEntryPoints|notReachableFromEntryPoints/);
+});
+
+test("the overview passes the reachability caveats so confidence can be stated", () => {
+  const result = hubResult();
+  result.reachability = {
+    version: 1,
+    entryPoints: [{ path: "src/f000.ts", reason: "test rule" }],
+    unreachable: ["src/f002.ts"],
+    caveats: ["2 files use dynamic or non-literal imports, so some files listed may be loaded that way."],
+  };
+  const { prompt } = buildExplainPrompt(result, { kind: "overview" });
+  assert.match(prompt, /"reachabilityCaveats":\["2 files use dynamic/);
+  assert.equal(EXPLAIN_PROMPT_VERSION, 5);
 });

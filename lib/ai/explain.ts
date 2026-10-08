@@ -15,7 +15,7 @@ export type ExplainSubject =
   | Readonly<{ kind: "file"; id: string }>;
 
 /** Bumped whenever the prompt or evidence shape changes, so cached answers are not reused. */
-export const EXPLAIN_PROMPT_VERSION = 4;
+export const EXPLAIN_PROMPT_VERSION = 5;
 
 export const EXPLAIN_SECTIONS: Readonly<Record<ExplainSubject["kind"], ReadonlyArray<string>>> = {
   overview: ["What this project is", "How it is organized", "How the pieces connect", "Hotspots and risks"],
@@ -194,6 +194,8 @@ function overviewEvidence(result: AnalysisResult, index: AnalysisIndex): Evidenc
       ? {
           recognisedEntryPoints: result.reachability.entryPoints.length,
           notReachableFromEntryPoints: result.reachability.unreachable.filter((id) => !isTestPath(id)).length,
+          // What could make that count wrong; state it when relaying the figure.
+          reachabilityCaveats: result.reachability.caveats,
         }
       : {}),
     filesThatFailedToParse: result.parseErrors.length,
