@@ -18,6 +18,7 @@ import { isValidUploadReference } from "@/lib/storage/uploadReference";
 import { downloadGithubArchive } from "@/lib/github/download";
 import { githubDisplayName, githubRepoUrl, type GithubSource } from "@/lib/github/source";
 import { buildRepositoryIR } from "./ir/bridge";
+import { analyzeRepositoryReachability } from "./repositoryReachability";
 import { buildArchitectureModel } from "./architecture-model/model";
 import { inferArchitectureViews } from "./architecture-model/inference";
 import {
@@ -293,8 +294,14 @@ async function runAnalysis(
     }
     const analysisViews = analyzerRuns.map(toAnalysisView);
 
+    const reachability = await analyzeRepositoryReachability({
+      projectRoot,
+      graph,
+      extractions: parserExtractionResult.extractions,
+    });
+
     checkBudget();
-    await report("layout", "Computing a readable diagram layout");
+    await report("layout","Computing a readable diagram layout");
     const renderData = await prepareRenderData(
       graph,
       clusters,
@@ -329,6 +336,7 @@ async function runAnalysis(
       analysisViews,
       ...(architectureModel ? { architectureModel } : {}),
       ...(architectureInferences ? { architectureInferences } : {}),
+      reachability,
     };
     checkBudget();
     await report("persisting", "Saving the shareable diagram");
