@@ -62,7 +62,7 @@ test("measured tour: entry points come first, with their reason", () => {
   assert.equal(steps[0].id, "src/app/main.ts");
   assert.match(steps[0].reason, /Entry point/);
   assert.match(steps[0].reason, /conventional root file/);
-  assert.match(steps[0].reason, /imports 4 files/);
+  assert.match(steps[0].reason, /Imports 4 files/);
   // Tests are entry points but never a place to start reading.
   assert.ok(!steps.some((s) => s.id === "tests/main.test.ts"));
 });

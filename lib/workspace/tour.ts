@@ -95,7 +95,7 @@ export function buildMeasuredTour(
     // A second entry point from another region shows more of the repository.
     const second = ranked.slice(1).find((path) => regionOf(path) !== regionOf(ranked[0])) ?? ranked[1];
     for (const path of [ranked[0], second].filter((path): path is string => Boolean(path))) {
-      take(path, `Entry point (${reasonOf.get(path)}); imports ${plural(outDeg(path), "file")}.`);
+      take(path, `Entry point: ${reasonOf.get(path)}. Imports ${plural(outDeg(path), "file")}.`);
     }
   } else {
     const roots = graph.nodes
