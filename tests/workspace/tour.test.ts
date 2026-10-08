@@ -75,34 +75,33 @@ test("measured tour: at most two entry points, then most-imported files", () => 
   const log = steps.find((s) => s.id === "src/core/log.ts");
   assert.ok(log, "the most-imported file is on the tour");
   // main, cli, http, store import it: four importers from three regions (app, net, core).
-  assert.match(log.reason, /^Imported by 4 files across 3 regions/);
+  assert.match(log.reason, /^Imported by 4 source files across 3 regions/);
 });
 
-test("measured tour: scripts yield to other entry points, and a second entry prefers another region", () => {
+test("measured tour: scripts yield to other entry points", () => {
   const graph = graphOf(
-    ["src/app/main.ts", "src/app/boot.ts", "src/cli/run.ts", "scripts/gen.ts", "src/core/a.ts", "src/core/b.ts", "src/core/c.ts"],
+    ["src/app/main.ts", "src/cli/run.ts", "scripts/gen.ts", "src/core/a.ts", "src/core/b.ts", "src/core/c.ts"],
     [
-      ["src/app/main.ts", "src/core/a.ts"], ["src/app/main.ts", "src/core/b.ts"], ["src/app/main.ts", "src/core/c.ts"],
-      ["src/app/boot.ts", "src/core/a.ts"], ["src/app/boot.ts", "src/core/b.ts"],
-      ["src/cli/run.ts", "src/core/a.ts"],
-      ["scripts/gen.ts", "src/core/a.ts"], ["scripts/gen.ts", "src/core/b.ts"], ["scripts/gen.ts", "src/core/c.ts"], ["scripts/gen.ts", "src/app/boot.ts"],
+      ...fan("src/app/main.ts", ["src/core/a.ts", "src/core/b.ts"]),
+      ...fan("src/cli/run.ts", ["src/core/a.ts"]),
+      ...fan("scripts/gen.ts", ["src/core/a.ts", "src/core/b.ts", "src/core/c.ts", "src/app/main.ts"]),
     ],
   );
   const steps = buildMeasuredTour(graph, reach([
-    ["src/app/main.ts", "conventional root file"], ["src/app/boot.ts", "conventional root file"],
-    ["src/cli/run.ts", "conventional root file"], ["scripts/gen.ts", "script (scripts/)"],
+    ["src/app/main.ts", "conventional root file"], ["src/cli/run.ts", "conventional root file"], ["scripts/gen.ts", "script (scripts/)"],
   ]));
-  assert.deepEqual(steps.slice(0, 2).map((s) => s.id), ["src/app/main.ts", "src/cli/run.ts"]);
-  assert.ok(!steps.some((s) => s.reason.startsWith("Entry point") && s.id === "scripts/gen.ts"));
+  assert.equal(steps[0].id, "src/app/main.ts");
+  assert.ok(!steps.some((s) => s.id === "scripts/gen.ts"));
   // With only a script to go on, it still starts the tour.
   const only = buildMeasuredTour(graph, reach([["scripts/gen.ts", "script (scripts/)"]]));
   assert.equal(only[0].id, "scripts/gen.ts");
 });
 
-test("measured tour: hubs prefer different regions", () => {
+test("measured tour: hubs cover different regions before repeating one", () => {
   const steps = buildMeasuredTour(REPO, REACH);
   const hubRegions = steps.filter((s) => s.reason.startsWith("Imported by")).map((s) => node(s.id).folder);
-  assert.equal(new Set(hubRegions).size, hubRegions.length, "no region repeats among the hubs");
+  // core, ui and net all have importable files, so each is represented before any repeats.
+  for (const region of ["src/core", "src/ui", "src/net"]) assert.ok(hubRegions.includes(region), region);
 });
 
 test("measured tour: at most 7 steps, no repeats, every step is a known file", () => {
@@ -151,7 +150,7 @@ test("measured tour: tiny repositories", () => {
   assert.deepEqual(buildMeasuredTour(graphOf(["a.ts"], []), undefined).map((s) => s.id), ["a.ts"]);
   const two = buildMeasuredTour(graphOf(["a.ts", "b.ts"], [["a.ts", "b.ts"]]), undefined);
   assert.deepEqual(two.map((s) => s.id), ["a.ts", "b.ts"]);
-  assert.match(two[1].reason, /Imported by 1 file across 1 region\b/);
+  assert.match(two[1].reason, /Imported by 1 source file across 1 region\b/);
 });
 
 test("measured tour: ignores entry points that are not in the graph", () => {
@@ -186,4 +185,114 @@ test("?tour=k: parsed, serialised and compared", () => {
   assert.equal(serializePosition({ ...EMPTY_POSITION, tour: null }), "");
   assert.equal(samePosition({ ...EMPTY_POSITION, tour: 2 }, { ...EMPTY_POSITION, tour: 3 }), false);
   assert.equal(samePosition({ ...EMPTY_POSITION, tour: null }, EMPTY_POSITION), true);
+});
+
+/* ─── Newcomer paths on shapes taken from real repositories ─── */
+
+/** Fan `from` out to each of `targets`. */
+const fan = (from: string, targets: string[]): Array<[string, string]> => targets.map((to) => [from, to]);
+
+const NEXT_APP = graphOf(
+  [
+    "app/layout.tsx", "app/page.tsx", "app/repo/[id]/page.tsx", "app/api/ai/route.ts", "app/api/big/route.ts",
+    "components/Map.tsx", "components/Panel.tsx", "components/Icons.tsx",
+    "lib/core/run.ts", "lib/core/plan.ts", "lib/core/types.ts", "lib/store/db.ts", "lib/store/cache.ts", "lib/store/index.ts",
+    "examples/demo/App.tsx", "examples/demo/util.ts", "examples/demo/more.ts", "scripts/gen.ts", "website/src/pages/index.js",
+    "website/src/a.js", "website/src/b.js",
+  ],
+  [
+    ...fan("app/layout.tsx", ["components/Icons.tsx"]),
+    ...fan("app/page.tsx", ["components/Map.tsx", "components/Panel.tsx"]),
+    ...fan("app/repo/[id]/page.tsx", ["components/Map.tsx", "components/Panel.tsx", "lib/store/db.ts"]),
+    ...fan("app/api/ai/route.ts", ["lib/core/run.ts", "lib/store/db.ts", "lib/store/cache.ts", "lib/core/plan.ts", "components/Icons.tsx", "lib/core/types.ts"]),
+    ...fan("app/api/big/route.ts", ["lib/core/run.ts", "lib/store/db.ts", "lib/store/cache.ts", "lib/core/plan.ts", "components/Icons.tsx", "lib/core/types.ts", "lib/store/index.ts"]),
+    ...fan("components/Map.tsx", ["components/Icons.tsx", "lib/core/types.ts"]),
+    ...fan("components/Panel.tsx", ["components/Icons.tsx", "lib/core/types.ts", "lib/core/run.ts"]),
+    ...fan("lib/core/run.ts", ["lib/core/plan.ts", "lib/core/types.ts", "lib/store/db.ts"]),
+    ...fan("lib/core/plan.ts", ["lib/core/types.ts"]),
+    ...fan("lib/store/db.ts", ["lib/store/cache.ts"]),
+    ...fan("lib/store/index.ts", ["lib/store/db.ts"]),
+    ...fan("examples/demo/App.tsx", ["examples/demo/util.ts", "lib/core/run.ts", "lib/store/db.ts", "examples/demo/more.ts"]),
+    ...fan("examples/demo/more.ts", ["examples/demo/util.ts", "lib/core/run.ts"]),
+    ...fan("scripts/gen.ts", ["lib/core/run.ts", "lib/store/db.ts", "lib/core/plan.ts"]),
+    ...fan("website/src/pages/index.js", ["website/src/a.js", "website/src/b.js"]),
+  ],
+);
+const NEXT_REACH = reach([
+  ["app/layout.tsx", "Next.js route (app/layout.tsx)"],
+  ["app/page.tsx", "Next.js route (app/page.tsx)"],
+  ["app/repo/[id]/page.tsx", "Next.js route (app/repo/[id]/page.tsx)"],
+  ["app/api/ai/route.ts", "Next.js route (app/api/ai/route.ts)"],
+  ["app/api/big/route.ts", "Next.js route (app/api/big/route.ts)"],
+  ["scripts/gen.ts", "script (scripts/)"],
+  ["website/src/pages/index.js", "Next.js route (website/src/pages/index.js)"],
+  ["examples/demo/App.tsx", "example or demo (examples/)"],
+]);
+
+test("newcomer path: the root layout and page open a Next.js app, ahead of API routes", () => {
+  const steps = buildMeasuredTour(NEXT_APP, NEXT_REACH);
+  assert.deepEqual(steps.slice(0, 2).map((s) => s.id), ["app/layout.tsx", "app/page.tsx"]);
+  assert.ok(!steps.some((s) => s.id.startsWith("app/api/") && s.reason.startsWith("Entry point")), "API routes are not what a newcomer reads first");
+});
+
+test("newcomer path: examples, scripts, website and docs never appear after the entry steps", () => {
+  const steps = buildMeasuredTour(NEXT_APP, NEXT_REACH);
+  assert.ok(steps.length >= 4);
+  for (const step of steps) assert.ok(!/^(examples|scripts|website|docs|benchmarks)\//.test(step.id), step.id);
+  // Neither does a repository that is mostly examples fill the tour with them.
+  const only = buildMeasuredTour(graphOf(["index.js", "lib/a.js", ...Array.from({ length: 6 }, (_, i) => `examples/e${i}/index.js`)], [
+    ...fan("index.js", ["lib/a.js"]), ...Array.from({ length: 6 }, (_, i): [string, string] => [`examples/e${i}/index.js`, "lib/a.js"]),
+    ...Array.from({ length: 5 }, (_, i): [string, string] => [`examples/e${i}/index.js`, `examples/e${i + 1}/index.js`]),
+  ]), reach([["index.js", "conventional root file"]]));
+  assert.ok(only.every((s) => !s.id.startsWith("examples/")));
+});
+
+test("newcomer path: type-only files do not dominate the hubs", () => {
+  const steps = buildMeasuredTour(NEXT_APP, NEXT_REACH);
+  const typeOnly = steps.filter((s) => /(^|\/)(types?|interfaces?|constants?)\.[jt]sx?$|\.d\.ts$/.test(s.id));
+  assert.ok(typeOnly.length <= 1);
+  // lib/core/types.ts is the most-imported file here, so it may be the one allowed.
+  const behaviour = steps.filter((s) => s.reason.startsWith("Imported by") && !typeOnly.includes(s));
+  assert.ok(behaviour.length >= 2);
+  // Two type files that rank first and second: only the top may stay.
+  const graph = graphOf(["index.ts", "src/types.ts", "src/interfaces.ts", "src/core.ts", "src/a.ts", "src/b.ts"], [
+    ...fan("index.ts", ["src/core.ts", "src/types.ts", "src/interfaces.ts"]),
+    ...fan("src/core.ts", ["src/types.ts", "src/interfaces.ts", "src/a.ts"]),
+    ...fan("src/a.ts", ["src/types.ts", "src/interfaces.ts", "src/b.ts"]), ...fan("src/b.ts", ["src/types.ts"]),
+  ]);
+  const small = buildMeasuredTour(graph, reach([["index.ts", "conventional root file"]]));
+  assert.ok(small.filter((s) => /types|interfaces/.test(s.id)).length <= 1);
+});
+
+test("newcomer path: a package's own entry beats its exports subpaths and browser map", () => {
+  const graph = graphOf(
+    ["index.js", "lib/axios.js", "lib/utils.js", "lib/adapters/http.js", "lib/adapters/xhr.js", "lib/core/Axios.js", "lib/core/settle.js"],
+    [
+      ...fan("index.js", ["lib/axios.js"]),
+      ...fan("lib/axios.js", ["lib/core/Axios.js", "lib/utils.js"]),
+      ...fan("lib/core/Axios.js", ["lib/utils.js", "lib/adapters/http.js"]),
+      ...fan("lib/adapters/http.js", ["lib/utils.js", "lib/core/settle.js", "lib/core/Axios.js", "lib/axios.js"]),
+      ...fan("lib/adapters/xhr.js", ["lib/utils.js", "lib/core/settle.js"]),
+    ],
+  );
+  const steps = buildMeasuredTour(graph, reach([
+    ["lib/adapters/http.js", 'package.json "browser" map'],
+    ["lib/utils.js", 'package.json "exports" ("./unsafe/utils.js")'],
+    ["lib/adapters/xhr.js", 'package.json "exports" ("./lib/adapters/xhr.js")'],
+    ["index.js", 'package.json "module"'],
+  ]));
+  assert.equal(steps[0].id, "index.js");
+  assert.ok(steps.slice(1).every((s) => !s.reason.startsWith("Entry point")), "exports and browser entries do not add entry steps");
+});
+
+test("newcomer path: entries are ordered by tier, then depth, then out-degree", () => {
+  const graph = graphOf(
+    ["src/index.ts", "src/deep/nested/index.ts", "cli/bin.ts", "src/a.ts", "src/b.ts", "src/c.ts"],
+    [...fan("src/index.ts", ["src/a.ts"]), ...fan("src/deep/nested/index.ts", ["src/a.ts", "src/b.ts", "src/c.ts"]), ...fan("cli/bin.ts", ["src/a.ts", "src/b.ts"])],
+  );
+  const steps = buildMeasuredTour(graph, reach([
+    ["src/deep/nested/index.ts", 'package.json "main"'], ["src/index.ts", 'package.json "main"'], ["cli/bin.ts", 'package.json "bin"'],
+  ]));
+  assert.equal(steps[0].id, "src/index.ts");
+  assert.equal(steps[1].id, "cli/bin.ts", "one entry per kind, so the second main does not follow");
 });

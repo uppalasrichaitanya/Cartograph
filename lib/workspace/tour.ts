@@ -38,10 +38,48 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 /** Entry points that are not a sensible place to start reading. */
 const NOT_A_START = new Set(["test file", "config file", "Storybook story", "example or demo", "benchmark"]);
 const TEST_PATH = /(?:\.(?:test|spec)\.[^/]+$|(?:^|\/)(?:__tests__|__mocks__|tests?|e2e)\/|(?:^|\/)test_[^/]*\.py$|_test\.(?:py|go)$)/;
+/** Material that supports a repository without being part of it: never a hub or a region's representative. */
+const SUPPORT_PATH = /(?:^|\/)(?:examples?|demos?|benchmarks?|docs?|website|scripts?|sandbox|fixtures?|playground|stories)\//;
+const CONFIG_PATH = /(?:^|\/)[^/]*\.config\.[cm]?[jt]sx?$|(?:^|\/)\.[^/]*rc\.[cm]?[jt]s$/;
+/** Files that only declare shapes or constants teach nothing about behaviour. */
+const DECLARATION_FILE = /(?:^|\/)(?:types?|interfaces?|constants?)\.[jt]sx?$|\.d\.ts$/;
+
+const isNoise = (path: string) => TEST_PATH.test(path) || SUPPORT_PATH.test(path) || CONFIG_PATH.test(path);
 
 /** Order by a count, highest first, with the path breaking ties so the tour is stable. */
 const byCountThenPath = (count: (path: string) => number) => (a: string, b: string) =>
   count(b) - count(a) || a.localeCompare(b);
+
+/**
+ * How primary an entry point is for someone reading the repository, and which
+ * kind of entry it is (a tour takes at most one per kind).
+ *
+ *   0  what the package or app itself starts from: package.json main, module
+ *      and bin, the conventional root file, the root layout and page
+ *   1  other pages and layouts
+ *   2  anything else recognised
+ *   3  API routes
+ *   4  exports subpaths and the browser map: surfaces, not starting points
+ *   5  the docs site
+ *   6  scripts
+ */
+function entryTier(path: string, reason: string): { tier: number; kind: string } {
+  const rule = ruleOf(reason);
+  if (/(?:^|\/)(?:website|docs?)\//.test(path)) return { tier: 5, kind: "docs" };
+  if (rule === "script") return { tier: 6, kind: "script" };
+  if (/^package\.json "(?:exports|browser)/.test(rule)) return { tier: 4, kind: rule };
+  if (rule === "Next.js route") {
+    if (/(?:^|\/)route\.[jt]sx?$/.test(path)) return { tier: 3, kind: "api" };
+    const page = path.match(/(?:^|\/)(layout|page)\.[jt]sx?$/);
+    if (page && /^(?:src\/)?app\/(?:layout|page)\./.test(path)) return { tier: page[1] === "layout" ? 0 : 0.5, kind: page[1] };
+    return { tier: 1, kind: page?.[1] ?? "route" };
+  }
+  if (/^package\.json "bin"/.test(rule)) return { tier: 0.2, kind: rule };
+  if (/^package\.json "(?:main|module)"/.test(rule) || rule === "conventional root file") {
+    return { tier: 0, kind: rule.startsWith("package.json") ? rule : "root" };
+  }
+  return { tier: 2, kind: rule };
+}
 
 /**
  * Up to seven steps through the import graph:
@@ -80,34 +118,45 @@ export function buildMeasuredTour(
   };
 
   /* 1. Where execution begins. */
-  const entries = (reachability?.entryPoints ?? []).filter(
-    (entry) => nodes.has(entry.path) && !NOT_A_START.has(ruleOf(entry.reason)) && outDeg(entry.path) > 0,
-  );
+  const entries = (reachability?.entryPoints ?? [])
+    .filter((entry) => nodes.has(entry.path) && !NOT_A_START.has(ruleOf(entry.reason)) && outDeg(entry.path) > 0)
+    .map((entry) => ({ ...entry, ...entryTier(entry.path, entry.reason) }))
+    .sort((a, b) =>
+      a.tier - b.tier ||
+      a.path.split("/").length - b.path.split("/").length ||
+      outDeg(b.path) - outDeg(a.path) ||
+      a.path.localeCompare(b.path));
   if (entries.length > 0) {
-    const reasonOf = new Map(entries.map((entry) => [entry.path, entry.reason]));
-    // Scripts are real entry points but rarely where understanding starts, so
-    // they only open the tour when nothing else does.
-    const isScript = (path: string) => ruleOf(reasonOf.get(path)!) === "script";
-    let ranked = [...reasonOf.keys()].sort(byCountThenPath(outDeg));
-    if (ranked.some((path) => !isScript(path))) ranked = ranked.filter((path) => !isScript(path));
-    // A second entry point from another region shows more of the repository.
-    const second = ranked.slice(1).find((path) => regionOf(path) !== regionOf(ranked[0])) ?? ranked[1];
-    for (const path of [ranked[0], second].filter((path): path is string => Boolean(path))) {
-      take(path, `Entry point: ${reasonOf.get(path)}. Imports ${plural(outDeg(path), "file")}.`);
+    // The best entry opens the tour. A second one joins only if it is also a
+    // primary start (tier below 2) of a different kind, so exports subpaths,
+    // API routes and the like never take a step from the repository's own code.
+    const picked = [entries[0]];
+    const next = entries.slice(1).find((entry) => entry.tier < 2 && !picked.some((p) => p.tier === entry.tier && p.kind === entry.kind));
+    if (next && entries[0].tier < 2) picked.push(next);
+    for (const entry of picked) {
+      take(entry.path, `Entry point: ${entry.reason}. Imports ${plural(outDeg(entry.path), "file")}.`);
     }
   } else {
     const roots = graph.nodes
       .map((node) => node.id)
-      .filter((path) => outDeg(path) > 0 && !TEST_PATH.test(path) && ![...(importers.get(path) ?? [])].some((from) => !TEST_PATH.test(from)))
+      .filter((path) => outDeg(path) > 0 && !isNoise(path) && ![...(importers.get(path) ?? [])].some((from) => !TEST_PATH.test(from)))
       .sort(byCountThenPath(outDeg));
     if (roots[0]) take(roots[0], `Imports ${plural(outDeg(roots[0]), "file")}; no non-test file imports it.`);
   }
 
-  /* 2. What everything leans on, spread across regions where it can be. */
-  const popular = graph.nodes
+  /* 2. What everything leans on, spread across regions where it can be.
+   * Importers that are tests or examples do not count towards "most imported",
+   * and neither those files nor type-only ones stand in for the code itself.
+   * The single most-imported file may still be a declarations file: if the
+   * whole repository leans on it, it is worth a step. */
+  const sourceImporters = (path: string) => [...(importers.get(path) ?? [])].filter((from) => !isNoise(from));
+  const sourceIn = (path: string) => sourceImporters(path).length;
+  const declarationOnly = (path: string) => DECLARATION_FILE.test(path) || outDeg(path) === 0;
+  const ranked = graph.nodes
     .map((node) => node.id)
-    .filter((path) => !chosen.has(path) && inDegree(path) > 0 && !TEST_PATH.test(path))
-    .sort(byCountThenPath(inDegree));
+    .filter((path) => !chosen.has(path) && !isNoise(path) && sourceIn(path) > 0)
+    .sort((a, b) => sourceIn(b) - sourceIn(a) || outDeg(b) - outDeg(a) || a.localeCompare(b));
+  const popular = ranked.filter((path) => !declarationOnly(path) || path === ranked[0]);
   const hubs: string[] = [];
   const regionsUsed = new Set(steps.map((step) => regionOf(step.id)));
   for (const path of popular) {
@@ -116,21 +165,22 @@ export function buildMeasuredTour(
     regionsUsed.add(regionOf(path));
     hubs.push(path);
   }
-  // A graph concentrated in few regions still gets some hubs.
+  // A repository concentrated in few regions still gets its most-imported files.
   for (const path of popular) {
-    if (hubs.length >= Math.min(2, MAX_HUB_STEPS)) break;
+    if (hubs.length >= MAX_HUB_STEPS || steps.length + hubs.length >= MAX_TOUR_STEPS) break;
     if (!hubs.includes(path)) hubs.push(path);
   }
-  hubs.sort(byCountThenPath(inDegree));
+  hubs.sort((a, b) => sourceIn(b) - sourceIn(a) || outDeg(b) - outDeg(a) || a.localeCompare(b));
   for (const path of hubs) {
-    const from = importers.get(path)!;
-    const regions = new Set([...from].map(regionOf));
-    take(path, `Imported by ${plural(from.size, "file")} across ${plural(regions.size, "region")}.`);
+    const from = sourceImporters(path);
+    const regions = new Set(from.map(regionOf));
+    take(path, `Imported by ${plural(from.length, "source file")} across ${plural(regions.size, "region")}.`);
   }
 
   /* 3. A representative for each large region not yet visited. */
   const filesByRegion = new Map<string, string[]>();
   for (const node of graph.nodes) {
+    if (isNoise(node.id)) continue;
     const list = filesByRegion.get(node.folder);
     if (list) list.push(node.id);
     else filesByRegion.set(node.folder, [node.id]);
@@ -142,11 +192,11 @@ export function buildMeasuredTour(
   for (const [region, files] of regions) {
     if (steps.length >= MAX_TOUR_STEPS) break;
     const best = files
-      .filter((path) => !chosen.has(path) && !TEST_PATH.test(path))
-      .sort((a, b) => inDegree(b) - inDegree(a) || outDeg(b) - outDeg(a) || a.localeCompare(b))[0];
+      .filter((path) => !chosen.has(path) && !declarationOnly(path) && sourceIn(path) + outDeg(path) > 0)
+      .sort((a, b) => sourceIn(b) - sourceIn(a) || outDeg(b) - outDeg(a) || a.localeCompare(b))[0];
     if (!best) continue;
-    const reason = inDegree(best) > 0
-      ? `Most imported file in ${region}: imported by ${plural(inDegree(best), "file")}.`
+    const reason = sourceIn(best) > 0
+      ? `Most imported file in ${region}: imported by ${plural(sourceIn(best), "source file")}.`
       : `Most connected file in ${region}: imports ${plural(outDeg(best), "file")}.`;
     take(best, reason);
   }
