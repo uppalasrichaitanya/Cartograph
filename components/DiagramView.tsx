@@ -1628,6 +1628,7 @@ function DiagramInner({
                       <li key={item.id}>
                         <span
                           className="lens-observation"
+                          title={item.label}
                           role="button"
                           tabIndex={0}
                           onClick={(e) => {

@@ -1112,8 +1112,9 @@ h1, h2, h3, p { margin-top: 0; }
   color: var(--ink-faint);
   font-size: var(--text-caption);
 }
-.lens-observations { display: grid; gap: 1px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.lens-observations { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .lens-observation {
+  display: block;
   width: 100%;
   padding: var(--space-1) var(--space-2);
   overflow: hidden;
