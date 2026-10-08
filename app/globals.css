@@ -1112,8 +1112,9 @@ h1, h2, h3, p { margin-top: 0; }
   color: var(--ink-faint);
   font-size: var(--text-caption);
 }
-.lens-observations { display: grid; gap: 1px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.lens-observations { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .lens-observation {
+  display: block;
   width: 100%;
   padding: var(--space-1) var(--space-2);
   overflow: hidden;
@@ -1126,6 +1127,26 @@ h1, h2, h3, p { margin-top: 0; }
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.lens-item-caveat {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-faint);
+  font-size: var(--text-caption);
+  font-style: italic;
+  line-height: 1.4;
+}
+.lens-item-more {
+  padding: var(--space-1) var(--space-2) 0;
+  color: var(--ink-faint);
+  font-size: var(--text-caption);
+}
+.lens-popover-notice { padding: 0 var(--space-3); }
+.reach-note {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+  line-height: 1.4;
 }
 .lens-observation:hover { background: var(--focus-wash); color: var(--focus-deep); }
 

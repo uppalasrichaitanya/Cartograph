@@ -1,0 +1,146 @@
+/**
+ * Reachability for a repository on disk: finds the manifests, reads the files
+ * the entry-point rules need, gathers the signals that could hide import
+ * paths, and hands both to the pure modules (entryPoints.ts, reachability.ts).
+ *
+ * Reads are kept small: manifests and Python/Go files (entry rules need their
+ * text) first, then only the JavaScript/TypeScript files that could hide a
+ * library path. Tests, examples, benchmarks and declaration files are never
+ * scanned for dynamic imports: a computed import there cannot hide a path
+ * into the library.
+ */
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+import type { DependencyGraph, ReachabilityResult } from "@/types/graph";
+import type { RawExtraction } from "./ir/types";
+import { findEntryPointsDetailed } from "./entryPoints";
+import { computeReachability, type ReachabilitySignals } from "./reachability";
+import { ruleOf } from "./reachabilityLenses";
+
+const SKIPPED_DIRECTORIES = new Set(["node_modules", "__pycache__", "site-packages", "dist", "build"]);
+const MAX_MANIFEST_DEPTH = 6;
+
+/** Entry rules whose files are runnable or test code, not the library itself. */
+const NON_LIBRARY_RULES = new Set(["test file", "Storybook story", "example or demo", "benchmark"]);
+
+/** File-routed frameworks whose conventions the entry-point rules do not know. */
+const UNRECOGNISED_FRAMEWORKS: ReadonlyArray<[RegExp, string]> = [
+  [/^nuxt$/, "Nuxt"],
+  [/^@remix-run\//, "Remix"],
+  [/^@react-router\//, "React Router"],
+  [/^gatsby$/, "Gatsby"],
+  [/^astro$/, "Astro"],
+  [/^@sveltejs\/kit$/, "SvelteKit"],
+  [/^@angular\/core$/, "Angular"],
+  [/^@solidjs\/start$/, "SolidStart"],
+  [/^expo-router$/, "Expo Router"],
+  [/^@docusaurus\/core$/, "Docusaurus"],
+  [/^vitepress$/, "VitePress"],
+  [/^@redwoodjs\//, "RedwoodJS"],
+];
+
+// Text scans for imports whose target is computed at run time. They can also
+// match inside strings or comments, which only makes the caveat more cautious.
+const DYNAMIC_JS = /\b(?:import|require)\s*\(\s*(?!(?:"[^"\n]*"|'[^'\n]*'|`[^`$\n]*`)\s*[,)])/;
+const DYNAMIC_PY = /\b(?:import_module|__import__)\s*\(\s*[^\s"')]/;
+
+async function findManifests(projectRoot: string): Promise<string[]> {
+  const found: string[] = [];
+  const walk = async (directory: string, depth: number): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(directory, entry.name);
+      if (entry.isFile() && (entry.name === "package.json" || entry.name === "pyproject.toml")) {
+        found.push(path.relative(projectRoot, full).split(path.sep).join("/"));
+      } else if (
+        entry.isDirectory() &&
+        depth < MAX_MANIFEST_DEPTH &&
+        !entry.name.startsWith(".") &&
+        !SKIPPED_DIRECTORIES.has(entry.name)
+      ) {
+        await walk(full, depth + 1);
+      }
+    }
+  };
+  await walk(projectRoot, 0);
+  return found.sort();
+}
+
+async function analyze(input: {
+  projectRoot: string;
+  graph: DependencyGraph;
+  extractions: ReadonlyArray<RawExtraction>;
+}): Promise<ReachabilityResult> {
+  const { projectRoot, graph } = input;
+  const manifestPaths = await findManifests(projectRoot);
+  const files = graph.nodes.map((node) => node.path);
+  const contents = new Map<string, string>();
+  const load = async (relative: string) => {
+    try {
+      contents.set(relative, await readFile(path.join(projectRoot, relative), "utf8"));
+    } catch {
+      // Unreadable: the rules treat it as absent.
+    }
+  };
+  await Promise.all([...manifestPaths, ...files.filter((file) => file.endsWith(".py") || file.endsWith(".go"))].map(load));
+
+  const { entryPoints, wildcardExports } = findEntryPointsDetailed({
+    files,
+    manifestPaths,
+    read: (p) => contents.get(p),
+  });
+
+  // Files that could hide a path into the library: everything but declaration
+  // files and what the entry rules already class as tests, examples or benchmarks.
+  const nonLibrary = new Set(
+    entryPoints.filter((entry) => NON_LIBRARY_RULES.has(ruleOf(entry.reason))).map((entry) => entry.path),
+  );
+  const scanned = files.filter((file) => !nonLibrary.has(file) && !/\.d\.[cm]?ts$/.test(file));
+  await Promise.all(scanned.filter((file) => !contents.has(file) && !file.endsWith(".go")).map(load));
+
+  let dynamicImportFiles = 0;
+  for (const file of scanned) {
+    const text = contents.get(file) ?? "";
+    if (file.endsWith(".py") ? DYNAMIC_PY.test(text) : !file.endsWith(".go") && DYNAMIC_JS.test(text)) dynamicImportFiles++;
+  }
+  let unresolvedInternalImports = 0;
+  for (const extraction of input.extractions) {
+    if (!nonLibrary.has(extraction.path)) unresolvedInternalImports += extraction.unresolvedInternalImports?.length ?? 0;
+  }
+
+  const frameworks = new Map<string, { name: string; root: string }>();
+  for (const manifest of manifestPaths.filter((p) => p.endsWith("package.json"))) {
+    const root = manifest === "package.json" ? "" : manifest.slice(0, -"/package.json".length);
+    try {
+      const pkg = JSON.parse(contents.get(manifest) ?? "") as Record<string, Record<string, string> | undefined>;
+      for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies })) {
+        for (const [pattern, label] of UNRECOGNISED_FRAMEWORKS) {
+          if (pattern.test(name)) frameworks.set(`${label}\0${root}`, { name: label, root });
+        }
+      }
+    } catch {
+      // A malformed manifest contributes no signal.
+    }
+  }
+
+  const signals: ReachabilitySignals = {
+    dynamicImportFiles,
+    unresolvedInternalImports,
+    unrecognisedFrameworks: [...frameworks.values()].sort((a, b) => a.root.localeCompare(b.root) || a.name.localeCompare(b.name)),
+    wildcardExports,
+  };
+  return computeReachability({ graph, entryPoints, signals });
+}
+
+/** Indirection so a test can make the analysis fail without touching the filesystem. */
+export const reachabilityHooks = { analyze };
+
+/** Reachability for a repository on disk. Rejects on failure; the caller decides to omit it. */
+export function analyzeRepositoryReachability(input: Parameters<typeof analyze>[0]): Promise<ReachabilityResult> {
+  return reachabilityHooks.analyze(input);
+}

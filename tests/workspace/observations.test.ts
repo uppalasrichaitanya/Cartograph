@@ -295,3 +295,16 @@ test("Phase 6 — 'not imported anywhere' means exactly that", async (t) => {
     assert.deepEqual(detectAnomalies(graph).orphans, ["a.ts", "b.ts"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Reachability lenses
+// ---------------------------------------------------------------------------
+// Their wording, grouping and selection are tested behaviourally in
+// tests/analysis/reachabilityLenses.test.ts; this file keeps the URL contract.
+
+test("Part F — both reachability lenses resolve from the URL", () => {
+  for (const lens of ["entries", "unreachable"]) {
+    const position = parsePosition(new URLSearchParams("?lens=" + lens), new Set(), new Set());
+    assert.equal(position.lens, lens);
+  }
+});

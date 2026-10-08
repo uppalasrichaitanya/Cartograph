@@ -15,7 +15,7 @@ export type ExplainSubject =
   | Readonly<{ kind: "file"; id: string }>;
 
 /** Bumped whenever the prompt or evidence shape changes, so cached answers are not reused. */
-export const EXPLAIN_PROMPT_VERSION = 3;
+export const EXPLAIN_PROMPT_VERSION = 5;
 
 export const EXPLAIN_SECTIONS: Readonly<Record<ExplainSubject["kind"], ReadonlyArray<string>>> = {
   overview: ["What this project is", "How it is organized", "How the pieces connect", "Hotspots and risks"],
@@ -189,6 +189,15 @@ function overviewEvidence(result: AnalysisResult, index: AnalysisIndex): Evidenc
     externalPackagesByImportingFiles: topCounts(externals, LIMITS.externals),
     importCycles: { total: result.anomalies.cycles.length, shown: cycles },
     filesNothingImports: result.anomalies.orphans.filter((id) => !isTestPath(id)).length,
+    // Only when entry points were recognised: with none, the search never ran.
+    ...(result.reachability && result.reachability.entryPoints.length > 0
+      ? {
+          recognisedEntryPoints: result.reachability.entryPoints.length,
+          notReachableFromEntryPoints: result.reachability.unreachable.filter((id) => !isTestPath(id)).length,
+          // What could make that count wrong; state it when relaying the figure.
+          reachabilityCaveats: result.reachability.caveats,
+        }
+      : {}),
     filesThatFailedToParse: result.parseErrors.length,
   });
   return evidence;
@@ -322,6 +331,7 @@ export function buildExplainPrompt(result: AnalysisResult, subject: ExplainSubje
       "- Write plain text without Markdown. Use plain language. Infer purpose from paths, declared names, and connections, and phrase inferences as such (\"likely\", \"appears to\").",
       "- Only state figures that appear in the evidence. Lists shaped {total, shown} are truncated: use total for counts.",
       "- internalImportEdges are import statements between repository files, not external packages.",
+      "- A file with no import path from a recognised entry point may be described as \"not reachable from recognised entry points\" and nothing stronger; never call a file dead or unused, because it may be loaded in ways the analysis cannot see.",
       "- Every claim must cite at least one allowed ID. Citation kinds: node (a file ID), edge (an import ID), region (a region name).",
       "- If evidence is thin or a role is a guess, say so in uncertainty.",
       "",

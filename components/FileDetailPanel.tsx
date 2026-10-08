@@ -2,7 +2,8 @@
 
 import type { FileEvidence } from "@/lib/analysis/projectConfidence";
 import type { Declaration } from "@/lib/analysis/ir/types";
-import type { GraphNode, DependencyGraph } from "@/types/graph";
+import type { GraphNode, DependencyGraph, ReachabilityResult } from "@/types/graph";
+import { describeReachability } from "@/lib/analysis/reachability";
 import { createGraphQuery } from "@/lib/analysis/query";
 import { CloseIcon } from "./Icons";
 
@@ -10,6 +11,7 @@ export function FileDetailPanel({
   file,
   graph,
   evidence,
+  reachability,
   declarations,
   selectedSymbolId,
   onSelectSymbol,
@@ -26,6 +28,8 @@ export function FileDetailPanel({
    * the panel stays silent rather than implying full confidence.
    */
   evidence: FileEvidence | null;
+  /** Entry points and unreachable files; undefined for analyses saved before reachability. */
+  reachability?: ReachabilityResult;
   /** Undefined means no symbol index; an empty array means indexed, with none. */
   declarations?: ReadonlyArray<Declaration>;
   selectedSymbolId: string | null;
@@ -45,6 +49,8 @@ export function FileDetailPanel({
   const importers = createGraphQuery(graph)
     .getNeighbors(file.id, "incoming")
     .map((node) => node.path);
+
+  const reach = describeReachability(reachability, file.id);
 
   return (
     <aside className="detail-panel is-entering" aria-label={`Details for ${file.path}`}>
@@ -78,6 +84,15 @@ export function FileDetailPanel({
         <div><dt>Folder</dt><dd>{file.folder}</dd></div>
         <div><dt>External packages</dt><dd>{file.externalImports.length}</dd></div>
       </dl>
+
+      {/* A measurement from the import graph, worded as one: the absence of a
+          path is not a claim that nothing loads the file. */}
+      {reach?.kind === "entry" && (
+        <p className="reach-note">Entry point: {reach.reason}</p>
+      )}
+      {reach?.kind === "unreachable" && (
+        <p className="reach-note">Not reachable from any entry point</p>
+      )}
 
       {declarations !== undefined && (
         <section>

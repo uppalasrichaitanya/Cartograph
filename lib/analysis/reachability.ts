@@ -1,0 +1,128 @@
+/**
+ * Reachability: which files have an import path from a recognised entry point.
+ *
+ * A breadth-first search over the resolved file-to-file edges. The output is a
+ * measurement of the import graph and nothing more: a file the search never
+ * reaches may still be loaded by something the analysis cannot see (a dynamic
+ * import, a framework convention, a build config), so the result carries the
+ * caveats that apply and the interface words it as "no import path from any
+ * recognised entry point", never as a verdict on the file.
+ *
+ * With no recognised entry point the search has no starting place and every
+ * file would look unreachable, so nothing is reported at all.
+ */
+import type { DependencyGraph, ReachabilityResult } from "@/types/graph";
+import type { EntryPoint } from "./entryPoints";
+
+/** Things found while parsing that could hide real import paths. */
+export type ReachabilitySignals = {
+  /** Files containing import()/require() calls whose argument is not a literal. */
+  dynamicImportFiles: number;
+  /** Internal imports that could not be resolved to a file. */
+  unresolvedInternalImports: number;
+  /** File-routed frameworks in use whose conventions are not recognised, with the package directory using each ("" for the project root). */
+  unrecognisedFrameworks: { name: string; root: string }[];
+  /** Package exports patterns with a wildcard: public API the search does not seed. */
+  wildcardExports?: { key: string; target: string }[];
+};
+
+const NO_SIGNALS: ReachabilitySignals = { dynamicImportFiles: 0, unresolvedInternalImports: 0, unrecognisedFrameworks: [] };
+
+const dirOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+
+/** What the inspector says about one file; null when there is nothing to say. */
+export function describeReachability(
+  reachability: ReachabilityResult | undefined,
+  filePath: string,
+): { kind: "entry"; reason: string } | { kind: "unreachable" } | null {
+  if (!reachability) return null;
+  const entry = reachability.entryPoints.find((candidate) => candidate.path === filePath);
+  if (entry) return { kind: "entry", reason: entry.reason };
+  return reachability.unreachable.includes(filePath) ? { kind: "unreachable" } : null;
+}
+
+export function computeReachability(input: {
+  graph: DependencyGraph;
+  entryPoints: readonly EntryPoint[];
+  signals?: ReachabilitySignals;
+}): ReachabilityResult {
+  const { graph } = input;
+  const signals = input.signals ?? NO_SIGNALS;
+  const known = new Set(graph.nodes.map((node) => node.id));
+  const entryPoints = input.entryPoints.filter((entry) => known.has(entry.path)).map((entry) => ({ ...entry }));
+
+  if (entryPoints.length === 0) {
+    return { version: 1, entryPoints: [], unreachable: [], caveats: ["No entry points recognised, so reachability was not computed"] };
+  }
+
+  const imports = new Map(graph.nodes.map((node) => [node.id, node.imports]));
+  // Languages where reaching one file loads others without an import edge:
+  // a Go package is every file in its directory, and importing a Python module
+  // runs the __init__.py of each package above it.
+  const goByDir = new Map<string, string[]>();
+  for (const id of known) {
+    if (!id.endsWith(".go")) continue;
+    const dir = dirOf(id);
+    goByDir.set(dir, [...(goByDir.get(dir) ?? []), id]);
+  }
+
+  const reached = new Set<string>();
+  const queue: string[] = [];
+  const visit = (id: string) => {
+    if (known.has(id) && !reached.has(id)) {
+      reached.add(id);
+      queue.push(id);
+    }
+  };
+  for (const entry of entryPoints) visit(entry.path);
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i];
+    for (const next of imports.get(id) ?? []) visit(next);
+    if (id.endsWith(".go")) for (const sibling of goByDir.get(dirOf(id)) ?? []) visit(sibling);
+    if (id.endsWith(".py")) {
+      for (let dir = dirOf(id); ; dir = dirOf(dir)) {
+        visit(dir ? `${dir}/__init__.py` : "__init__.py");
+        if (!dir) break;
+      }
+    }
+  }
+
+  // A nested package on a framework whose conventions are unknown loads most of
+  // its files by convention, so its files are not evaluated at all.
+  const skippedRoots = signals.unrecognisedFrameworks.filter((p) => p.root !== "");
+  const unreachable = graph.nodes
+    .map((node) => node.path)
+    .filter(
+      (path) =>
+        !reached.has(path) &&
+        !/\.d\.[cm]?ts$/.test(path) &&
+        !skippedRoots.some((skipped) => path.startsWith(`${skipped.root}/`)),
+    )
+    .sort();
+
+  const caveats: string[] = [];
+  // Caveats about what could hide an import path say nothing when no file is listed.
+  const hidden: string[] = [];
+  if (signals.dynamicImportFiles > 0) {
+    hidden.push(
+      `${signals.dynamicImportFiles} ${signals.dynamicImportFiles === 1 ? "file uses" : "files use"} dynamic or non-literal imports, which name no file the analysis can follow, so some files listed may be loaded that way.`,
+    );
+  }
+  if (signals.unresolvedInternalImports > 0) {
+    const n = signals.unresolvedInternalImports;
+    hidden.push(`${n} internal ${n === 1 ? "import" : "imports"} could not be resolved to a file, so a path through ${n === 1 ? "it" : "them"} may be missing.`);
+  }
+  const rootFrameworks = signals.unrecognisedFrameworks.filter((p) => p.root === "").map((p) => p.name);
+  if (rootFrameworks.length > 0) {
+    hidden.push(
+      `This repository uses ${rootFrameworks.join(", ")}, whose file conventions are not recognised, so files it loads by convention may be listed.`,
+    );
+  }
+  for (const { name, root } of skippedRoots) {
+    caveats.push(`${root}/ uses ${name}, whose file conventions are not recognised, so its files are not reported.`);
+  }
+  for (const { key, target } of signals.wildcardExports ?? []) {
+    hidden.push(`package.json exports "${key}" exposes ${target} to consumers, so listed files matching it may be public API.`);
+  }
+  return { version: 1, entryPoints, unreachable, caveats: [...(unreachable.length > 0 ? hidden : []), ...caveats] };
+}

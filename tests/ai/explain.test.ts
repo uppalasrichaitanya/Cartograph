@@ -173,8 +173,44 @@ test("a rate-limited provider is tried last until its cooldown passes", async ()
 });
 
 test("region prompts describe regions as folder groups, not top-level folders", () => {
-  assert.equal(EXPLAIN_PROMPT_VERSION, 3);
+  assert.equal(EXPLAIN_PROMPT_VERSION, 5);
   const prompt = buildExplainPrompt(hubResult(), { kind: "region", id: "src" });
   assert.match(prompt.prompt, /a folder group/);
   assert.doesNotMatch(prompt.prompt, /top-level/);
+});
+
+test("the overview carries entry point and not-reachable counts (tests excluded), worded without verdicts", () => {
+  const result = hubResult();
+  result.reachability = {
+    version: 1,
+    entryPoints: [{ path: "src/f000.ts", reason: "test rule" }, { path: "src/f001.ts", reason: "test rule" }],
+    unreachable: ["src/f002.ts", "src/f003.test.ts", "tests/helper.ts"],
+    caveats: [],
+  };
+  const { prompt } = buildExplainPrompt(result, { kind: "overview" });
+  assert.match(prompt, /"recognisedEntryPoints":2/);
+  assert.match(prompt, /"notReachableFromEntryPoints":1/);
+  assert.match(prompt, /not reachable from recognised entry points/);
+  assert.match(prompt, /never call a file dead or unused/i);
+});
+
+test("without reachability, or with no recognised entry point, the overview states neither count", () => {
+  const without = buildExplainPrompt(hubResult(), { kind: "overview" }).prompt;
+  assert.doesNotMatch(without, /recognisedEntryPoints|notReachableFromEntryPoints/);
+  const none = hubResult();
+  none.reachability = { version: 1, entryPoints: [], unreachable: [], caveats: ["No entry points recognised, so reachability was not computed"] };
+  assert.doesNotMatch(buildExplainPrompt(none, { kind: "overview" }).prompt, /recognisedEntryPoints|notReachableFromEntryPoints/);
+});
+
+test("the overview passes the reachability caveats so confidence can be stated", () => {
+  const result = hubResult();
+  result.reachability = {
+    version: 1,
+    entryPoints: [{ path: "src/f000.ts", reason: "test rule" }],
+    unreachable: ["src/f002.ts"],
+    caveats: ["2 files use dynamic or non-literal imports, so some files listed may be loaded that way."],
+  };
+  const { prompt } = buildExplainPrompt(result, { kind: "overview" });
+  assert.match(prompt, /"reachabilityCaveats":\["2 files use dynamic/);
+  assert.equal(EXPLAIN_PROMPT_VERSION, 5);
 });

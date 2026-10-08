@@ -244,4 +244,22 @@ export type AnalysisResult = {
   architectureModel?: ArchitectureModelData;
   /** Optional heuristic layer/domain groupings, always visibly non-verified. */
   architectureInferences?: ArchitectureInferenceData;
+  /** Entry points and the files no import path reaches. Absent on analyses made before reachability existed. */
+  reachability?: ReachabilityResult;
+};
+
+/**
+ * Which files an import-path search from recognised entry points does and does
+ * not reach. A measurement of the import graph, not a verdict: a file with no
+ * path from any recognised entry point may still be loaded by a mechanism the
+ * analysis cannot see, which `caveats` lists where it applies.
+ */
+export type ReachabilityResult = {
+  version: 1;
+  /** Files treated as starting points, each with the rule that matched. */
+  entryPoints: { path: string; reason: string }[];
+  /** Source files with no import path from any entry point. Empty when no entry point was recognised. */
+  unreachable: string[];
+  /** Why the unreachable list could be incomplete or mistaken. */
+  caveats: string[];
 };

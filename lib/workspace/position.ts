@@ -42,6 +42,8 @@ export const LENS_VALUES = [
   "hubs",
   "orphans",
   "dependencies",
+  "entries",
+  "unreachable",
 ] as const;
 
 export type LensValue = (typeof LENS_VALUES)[number];

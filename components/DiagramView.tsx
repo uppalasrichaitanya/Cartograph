@@ -56,6 +56,7 @@ import { ExportDialog } from "./ExportDialog";
 import { copyShareLink } from "@/lib/workspace/share";
 import { forgetOwnerToken, loadOwnerToken, saveOwnerToken, takeOwnerFragment } from "@/lib/workspace/ownerToken";
 import { OwnerNotice } from "./OwnerNotice";
+import { buildReachabilityLenses, reachabilityLensFiles } from "@/lib/analysis/reachabilityLenses";
 
 /* ─── Types ─── */
 type FlowNode = Node<RenderNodeData, "architecture">;
@@ -71,7 +72,14 @@ type FlowNode = Node<RenderNodeData, "architecture">;
  * what it shows without judging it. It is not currently offered in the lens
  * list, but a link minted while it was still reachable should still resolve.
  */
-type HighlightMode = "cycles" | "hubs" | "orphans" | "dependencies" | null;
+type HighlightMode =
+  | "cycles"
+  | "hubs"
+  | "orphans"
+  | "dependencies"
+  | "entries"
+  | "unreachable"
+  | null;
 
 /* ─── Architecture Node ─── */
 /**
@@ -812,7 +820,6 @@ function DiagramInner({
   /* ─── Highlight Modes (Issue 3, 4) ─── */
   const getHighlightedNodeIds = useCallback((): Set<string> | null => {
     if (!highlightMode) return null;
-
     // Every observation names FILES. In the region overview the rendered nodes
     // are regions (`folder:lib`), so a file path matches nothing there.
     //
@@ -837,6 +844,14 @@ function DiagramInner({
       case "orphans":
         for (const orphan of result.anomalies.orphans) files.add(orphan);
         break;
+      case "entries":
+      case "unreachable": {
+        // Null when no search ran or nothing qualifies: dimming the whole map would claim otherwise.
+        const matched = reachabilityLensFiles(result.reachability, highlightMode);
+        if (!matched) return null;
+        for (const file of matched) files.add(file);
+        break;
+      }
       case "dependencies":
         return null; // Dependencies highlights edges, not specific nodes.
     }
@@ -848,7 +863,10 @@ function DiagramInner({
       if (files.has(node.id)) ids.add(`folder:${node.folder}`);
     }
     return ids;
-  }, [highlightMode, result.anomalies, result.graph.nodes]);
+  }, [highlightMode, result.anomalies, result.reachability, result.graph.nodes]);
+
+  // A reachability lens in the URL of an analysis without a search names nothing to show.
+  const lensAvailable = (result.reachability?.entryPoints.length ?? 0) > 0;
 
   /* ─── Apply visual highlight to nodes and edges ─── */
   useEffect(() => {
@@ -1185,6 +1203,8 @@ function DiagramInner({
     orphans: "Not imported anywhere",
     cycles: "Import cycles",
     dependencies: "All dependencies",
+    entries: "Entry points",
+    unreachable: "Unreachable from entry points",
   };
 
   /* ─── Observation lenses ───
@@ -1213,6 +1233,10 @@ function DiagramInner({
     /** What was measured, in plain language. Shown under the label. */
     note: string;
     empty: string;
+    /** Quiet notes on how far the measurement can be trusted. */
+    caveats?: ReadonlyArray<string>;
+    /** How many items the popover lists before pointing at the map. Defaults to 3. */
+    limit?: number;
     items: () => ReadonlyArray<{ id: string; label: string; target: string }>;
   }> = useMemo(
     () => [
@@ -1254,8 +1278,9 @@ function DiagramInner({
             target: cycle[0],
           })),
       },
+      ...buildReachabilityLenses(result.reachability),
     ],
-    [result.anomalies],
+    [result.anomalies, result.reachability],
   );
 
   /* No summed observation count.
@@ -1517,7 +1542,7 @@ function DiagramInner({
           )}
         </div>
 
-        {highlightMode && (
+        {highlightMode && (highlightMode !== "entries" && highlightMode !== "unreachable" || lensAvailable) && (
           <div className="lens-active-bar" role="status">
             <span>{HIGHLIGHT_NAMES[highlightMode] ?? highlightMode}</span>
             <button
@@ -1538,6 +1563,11 @@ function DiagramInner({
       {lensMenuOpen && (
         <div className="lens-popover" role="dialog" aria-label="Observations">
           <p className="lens-popover-heading">OBSERVATIONS</p>
+          {result.reachability && result.reachability.entryPoints.length === 0 && (
+            <p className="lens-item-empty lens-popover-notice">
+              {result.reachability.caveats[0]}
+            </p>
+          )}
           {LENSES.map((lens) => {
             const items = lens.items();
             return (
@@ -1556,14 +1586,19 @@ function DiagramInner({
                     a reader can see the basis and disagree with the
                     conclusion. */}
                 <span className="lens-item-note">{lens.note}</span>
+                {lens.caveats?.map((caveat) => (
+                  <span key={caveat} className="lens-item-caveat">{caveat}</span>
+                ))}
                 {items.length === 0 ? (
                   <p className="lens-item-empty">{lens.empty}</p>
                 ) : (
                   <ul className="lens-observations">
-                    {items.slice(0, 3).map((item) => (
+                    {items.slice(0, lens.limit ?? 3).map((item) => (
                       <li key={item.id}>
                         <span
                           className="lens-observation"
+                          title={item.label}
+                          aria-label={item.label}
                           role="button"
                           tabIndex={0}
                           onClick={(e) => {
@@ -1583,6 +1618,11 @@ function DiagramInner({
                         </span>
                       </li>
                     ))}
+                    {items.length > (lens.limit ?? 3) && (
+                      <li className="lens-item-more">
+                        +{items.length - (lens.limit ?? 3)} more, emphasised on the map
+                      </li>
+                    )}
                   </ul>
                 )}
               </button>
@@ -1619,6 +1659,7 @@ function DiagramInner({
           file={selectedFile}
           graph={result.graph}
           evidence={selectedEvidence}
+          reachability={result.reachability}
           declarations={selectedDeclarations}
           selectedSymbolId={selectedSymbolId}
           onSelectSymbol={setSelectedSymbolId}
