@@ -78,6 +78,27 @@ test("measured tour: at most two entry points, then most-imported files", () => 
   assert.match(log.reason, /^Imported by 4 files across 3 regions/);
 });
 
+test("measured tour: scripts yield to other entry points, and a second entry prefers another region", () => {
+  const graph = graphOf(
+    ["src/app/main.ts", "src/app/boot.ts", "src/cli/run.ts", "scripts/gen.ts", "src/core/a.ts", "src/core/b.ts", "src/core/c.ts"],
+    [
+      ["src/app/main.ts", "src/core/a.ts"], ["src/app/main.ts", "src/core/b.ts"], ["src/app/main.ts", "src/core/c.ts"],
+      ["src/app/boot.ts", "src/core/a.ts"], ["src/app/boot.ts", "src/core/b.ts"],
+      ["src/cli/run.ts", "src/core/a.ts"],
+      ["scripts/gen.ts", "src/core/a.ts"], ["scripts/gen.ts", "src/core/b.ts"], ["scripts/gen.ts", "src/core/c.ts"], ["scripts/gen.ts", "src/app/boot.ts"],
+    ],
+  );
+  const steps = buildMeasuredTour(graph, reach([
+    ["src/app/main.ts", "conventional root file"], ["src/app/boot.ts", "conventional root file"],
+    ["src/cli/run.ts", "conventional root file"], ["scripts/gen.ts", "script (scripts/)"],
+  ]));
+  assert.deepEqual(steps.slice(0, 2).map((s) => s.id), ["src/app/main.ts", "src/cli/run.ts"]);
+  assert.ok(!steps.some((s) => s.reason.startsWith("Entry point") && s.id === "scripts/gen.ts"));
+  // With only a script to go on, it still starts the tour.
+  const only = buildMeasuredTour(graph, reach([["scripts/gen.ts", "script (scripts/)"]]));
+  assert.equal(only[0].id, "scripts/gen.ts");
+});
+
 test("measured tour: hubs prefer different regions", () => {
   const steps = buildMeasuredTour(REPO, REACH);
   const hubRegions = steps.filter((s) => s.reason.startsWith("Imported by")).map((s) => node(s.id).folder);

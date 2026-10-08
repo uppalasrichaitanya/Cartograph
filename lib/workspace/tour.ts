@@ -87,8 +87,14 @@ export function buildMeasuredTour(
   );
   if (entries.length > 0) {
     const reasonOf = new Map(entries.map((entry) => [entry.path, entry.reason]));
-    const ranked = [...reasonOf.keys()].sort(byCountThenPath(outDeg));
-    for (const path of ranked.slice(0, MAX_ENTRY_STEPS)) {
+    // Scripts are real entry points but rarely where understanding starts, so
+    // they only open the tour when nothing else does.
+    const isScript = (path: string) => ruleOf(reasonOf.get(path)!) === "script";
+    let ranked = [...reasonOf.keys()].sort(byCountThenPath(outDeg));
+    if (ranked.some((path) => !isScript(path))) ranked = ranked.filter((path) => !isScript(path));
+    // A second entry point from another region shows more of the repository.
+    const second = ranked.slice(1).find((path) => regionOf(path) !== regionOf(ranked[0])) ?? ranked[1];
+    for (const path of [ranked[0], second].filter((path): path is string => Boolean(path))) {
       take(path, `Entry point (${reasonOf.get(path)}); imports ${plural(outDeg(path), "file")}.`);
     }
   } else {
