@@ -28,6 +28,17 @@ const NO_SIGNALS: ReachabilitySignals = { dynamicImportFiles: 0, unresolvedInter
 
 const dirOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
 
+/** What the inspector says about one file; null when there is nothing to say. */
+export function describeReachability(
+  reachability: ReachabilityResult | undefined,
+  filePath: string,
+): { kind: "entry"; reason: string } | { kind: "unreachable" } | null {
+  if (!reachability) return null;
+  const entry = reachability.entryPoints.find((candidate) => candidate.path === filePath);
+  if (entry) return { kind: "entry", reason: entry.reason };
+  return reachability.unreachable.includes(filePath) ? { kind: "unreachable" } : null;
+}
+
 export function computeReachability(input: {
   graph: DependencyGraph;
   entryPoints: readonly EntryPoint[];

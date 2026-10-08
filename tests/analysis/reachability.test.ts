@@ -115,3 +115,18 @@ test("a nested package on an unrecognised framework is not evaluated; a root-lev
   assert.ok(result.caveats.some((c) => /website\/ uses Gatsby.*not reported/.test(c)));
   assert.ok(result.caveats.some((c) => /VitePress/.test(c) && !/not reported/.test(c)));
 });
+
+test("describeReachability: an entry point, an unreachable file, or nothing", async () => {
+  const { describeReachability } = await import("@/lib/analysis/reachability");
+  const reach = {
+    version: 1 as const,
+    entryPoints: [{ path: "a.ts", reason: 'package.json "main"' }],
+    unreachable: ["x.ts"],
+    caveats: ["note"],
+  };
+  assert.deepEqual(describeReachability(reach, "a.ts"), { kind: "entry", reason: 'package.json "main"' });
+  assert.deepEqual(describeReachability(reach, "x.ts"), { kind: "unreachable" });
+  assert.equal(describeReachability(reach, "b.ts"), null);
+  assert.equal(describeReachability(undefined, "a.ts"), null);
+  assert.equal(describeReachability({ ...reach, entryPoints: [], unreachable: [] }, "x.ts"), null);
+});
