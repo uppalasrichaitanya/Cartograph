@@ -73,6 +73,12 @@ export type WorkspacePosition = {
   /** Active observation lens, or null. */
   readonly lens: LensValue | null;
   /**
+   * Guided tour position, 1-based, or null when no tour is running. Whether it
+   * names a real step is decided against the tour itself, which this module
+   * does not know about.
+   */
+  readonly tour?: number | null;
+  /**
    * Camera framing, or null to let the map frame itself.
    *
    * Null is meaningfully different from a stored camera: it means "no opinion,
@@ -96,7 +102,17 @@ const PARAM = {
   symbol: "symbol",
   lens: "lens",
   camera: "cam",
+  tour: "tour",
 } as const;
+
+/** More steps than any tour has, so a typo cannot ask for an absurd one. */
+const MAX_TOUR_PARAM = 999;
+
+function parseTour(raw: string | null): number | null {
+  if (!raw || !/^[1-9]\d{0,2}$/.test(raw)) return null;
+  const value = Number(raw);
+  return value <= MAX_TOUR_PARAM ? value : null;
+}
 
 function parseLens(raw: string | null): LensValue | null {
   if (!raw) return null;
@@ -177,6 +193,7 @@ export function parsePosition(
     file,
     symbol,
     lens: parseLens(params.get(PARAM.lens)),
+    tour: parseTour(params.get(PARAM.tour)),
     camera: parseCamera(params.get(PARAM.camera)),
   };
 }
@@ -194,6 +211,7 @@ export function serializePosition(position: WorkspacePosition): string {
   if (position.file) params.set(PARAM.file, position.file);
   if (position.file && position.symbol) params.set(PARAM.symbol, position.symbol);
   if (position.lens) params.set(PARAM.lens, position.lens);
+  if (position.tour) params.set(PARAM.tour, String(position.tour));
   if (position.camera) params.set(PARAM.camera, formatCamera(position.camera));
   const query = params.toString();
   return query ? `?${query}` : "";
@@ -214,6 +232,7 @@ export function samePosition(
     a.region !== b.region ||
     a.file !== b.file ||
     (a.symbol ?? null) !== (b.symbol ?? null) ||
+    (a.tour ?? null) !== (b.tour ?? null) ||
     a.lens !== b.lens
   ) {
     return false;
@@ -240,6 +259,7 @@ export function isNavigation(
     from.region !== to.region ||
     from.file !== to.file ||
     (from.symbol ?? null) !== (to.symbol ?? null) ||
+    (from.tour ?? null) !== (to.tour ?? null) ||
     from.lens !== to.lens
   );
 }
