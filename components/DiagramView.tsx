@@ -354,6 +354,14 @@ function DiagramInner({
   const tourSource: TourSource = tourState?.source === "ai" && aiSteps ? "ai" : "measured";
   const tourActive = Boolean(tourState && tourSteps && tourSteps.length > 0);
   const tourIndex = tourState && tourSteps ? Math.max(0, Math.min(tourState.index, tourSteps.length - 1)) : 0;
+  // What Back and Forward resolve a ?tour=k against: the tour on screen, or
+  // else the measured one (an exited AI tour cannot be rebuilt from a link).
+  const tourRef = useRef<{ source: TourSource; steps: ReadonlyArray<TourStep> } | null>(null);
+  useEffect(() => {
+    tourRef.current = tourSteps
+      ? { source: tourSource, steps: tourSteps }
+      : { source: "measured", steps: measuredSteps };
+  }, [tourSteps, tourSource, measuredSteps]);
 
   const [folder, setFolder] = useState<string | null>(initialRegion);
   const [selectedFile, setSelectedFile] = useState<GraphNode | null>(
@@ -362,6 +370,11 @@ function DiagramInner({
         ? graphQuery.getNode(initialPosition.file) ?? null
         : null),
   );
+  /* Any navigation outside the tour ends it: picking another file, another
+   * region, or closing the inspector would otherwise leave the card, the
+   * address and the inspector telling three different stories. Adjusted during
+   * render, so no frame shows a card for a step that is no longer selected. */
+  if (tourState && tourSteps && selectedFile?.id !== tourSteps[tourIndex]?.id) setTourState(null);
   const [selectedSymbolId, setSelectedSymbolId] = useState<string | null>(
     initialPosition.symbol ?? null,
   );
@@ -691,10 +704,17 @@ function DiagramInner({
    * The camera is read at write time rather than tracked as state — it changes
    * continuously during a pan, and mirroring that into React state would
    * re-render the graph on every frame. */
+  // A tour deep link lands on its step's region and file, so its first write
+  // completes the bare ?tour=k in place (replaceState) instead of adding an entry.
   const lastWrittenPosition = useRef<WorkspacePosition>(initialPosition);
+  const completeDeepLink = useRef(initialTourNode !== null);
   const writePosition = useCallback(
     ({ includeCamera = true }: { includeCamera?: boolean } = {}) => {
       if (typeof window === "undefined") return;
+      // A region change fades first, with the new selection already made. That
+      // half-way state (a file from the region still to come) is not a place
+      // anyone was at, so it is not written; the write after the fade is.
+      if (pendingRegionChange.current !== null) return;
 
       // Preserve any framing already in the address when not writing new
       // framing, so a state change does not silently discard a camera the
@@ -732,9 +752,10 @@ function DiagramInner({
       };
       if (samePosition(next, lastWrittenPosition.current)) return;
 
-      const method = isNavigation(lastWrittenPosition.current, next)
+      const method = !completeDeepLink.current && isNavigation(lastWrittenPosition.current, next)
         ? "pushState"
         : "replaceState";
+      completeDeepLink.current = false;
       lastWrittenPosition.current = next;
       window.history[method](
         null,
@@ -780,11 +801,25 @@ function DiagramInner({
         knownFiles,
         symbolOwnerById,
       );
-      lastWrittenPosition.current = position;
+      // A tour position is only honoured when it still describes the tour on
+      // screen: the step's file is the URL's file, and the region and file come
+      // from the step. Otherwise (an AI tour that was exited, a hand-edited
+      // link) the tour is dropped and the address says so.
+      const live = tourRef.current;
+      const step = position.tour && live ? live.steps[position.tour - 1] : undefined;
+      const stepNode = step ? graphQuery.getNode(step.id) : undefined;
+      const tourHolds = Boolean(stepNode && position.file === stepNode.id);
+      const resolved: WorkspacePosition = tourHolds && stepNode
+        ? { ...position, region: stepNode.folder }
+        : { ...position, tour: null };
+      lastWrittenPosition.current = resolved;
+      if (position.tour && !tourHolds) {
+        window.history.replaceState(null, "", `${window.location.pathname}${serializePosition(resolved)}`);
+      }
 
       // Whether this step crosses a region boundary decides the tier, and
       // must be read before the region state is written.
-      const crossesRegion = position.region !== folder;
+      const crossesRegion = resolved.region !== folder;
 
       // Reversal uses the same mechanism as the forward move. A region change
       // reached by Back therefore recedes and arrives exactly as one reached
@@ -792,27 +827,24 @@ function DiagramInner({
       // in both directions, and sharing the implementation is the only way
       // that stays true as either side changes.
       // A restored camera wins over fitting the region on arrival.
-      if (crossesRegion) changeRegion(position.region, !position.camera);
+      if (crossesRegion || pendingRegionChange.current !== null) changeRegion(resolved.region, !resolved.camera);
+      if (tourHolds && stepNode && !resolved.camera) pendingFocus.current = stepNode.id;
       setSelectedFile(
-        position.file
-          ? graphQuery.getNode(position.file) ?? null
+        resolved.file
+          ? graphQuery.getNode(resolved.file) ?? null
           : null,
       );
-      setSelectedSymbolId(position.symbol ?? null);
-      setHighlightMode(position.lens);
+      setSelectedSymbolId(resolved.symbol ?? null);
+      setHighlightMode(resolved.lens);
       // Back and forward walk through the tour's steps and out of it.
-      setTourState(
-        position.tour
-          ? (current) => ({ source: current?.source ?? "measured", index: position.tour! - 1 })
-          : null,
-      );
-      if (position.camera) {
+      setTourState(tourHolds && live ? { source: live.source, index: resolved.tour! - 1 } : null);
+      if (resolved.camera) {
         // Restored at the tier of the change being undone: structural when
         // the step crossed a region, connective when it moved within one.
         // A single hardcoded duration was symmetric with neither, so undoing
         // a move felt like a different kind of act from making it.
-        reactFlowInstance.setCenter(position.camera.x, position.camera.y, {
-          zoom: position.camera.zoom,
+        reactFlowInstance.setCenter(resolved.camera.x, resolved.camera.y, {
+          zoom: resolved.camera.zoom,
           ...cameraMotion(crossesRegion ? "structural" : "connective"),
         });
       }
@@ -1186,6 +1218,9 @@ function DiagramInner({
    * every other move. Exiting only drops the tour state; the selection stays,
    * as it would after any other navigation. */
   const tourCard = useRef<HTMLElement>(null);
+  const aiRequest = useRef(0);
+  const tourLive = useRef(false);
+  useEffect(() => { tourLive.current = tourActive; }, [tourActive]);
   const tourStartButton = useRef<HTMLButtonElement>(null);
 
   const showTourStep = useCallback((steps: ReadonlyArray<TourStep>, i: number) => {
@@ -1196,7 +1231,9 @@ function DiagramInner({
     setSelectedFile(graphNode);
     recordExamined("file", graphNode.id);
     pendingFocus.current = graphNode.id;
-    if (graphNode.folder !== folder) changeRegion(graphNode.folder);
+    // Always go through changeRegion when a move is in flight: it cancels the
+    // pending fade, so a fast ArrowRight cannot land the map in a stale region.
+    if (graphNode.folder !== folder || pendingRegionChange.current !== null) changeRegion(graphNode.folder);
   }, [graphQuery, folder, changeRegion, recordExamined]);
 
   const startTour = useCallback((source: TourSource) => {
@@ -1220,14 +1257,17 @@ function DiagramInner({
   }, [tourSteps, tourIndex, tourSource, showTourStep]);
 
   const exitTour = useCallback(() => {
+    aiRequest.current += 1; // an AI order still loading must not reopen the tour
     setTourState(null);
     setAiTourError(null);
-    requestAnimationFrame(() => tourStartButton.current?.focus({ preventScroll: true }));
+    // The start button exists only on the overview; the map is always there.
+    requestAnimationFrame(() => (tourStartButton.current ?? canvas.current)?.focus({ preventScroll: true }));
   }, []);
 
   /* Loads the overview through the existing explain route (a cached one costs
    * no provider call), then switches the running tour to its reading order. */
   const loadAiReadingOrder = useCallback(async () => {
+    const token = ++aiRequest.current;
     setAiTourLoading(true);
     setAiTourError(null);
     try {
@@ -1239,6 +1279,7 @@ function DiagramInner({
       const payload = (await response.json()) as { readingOrder?: Array<{ id: string; reason: string }>; error?: string };
       if (!response.ok) throw new Error(payload.error || "The AI reading order could not be loaded.");
       setAiReadingOrder(payload.readingOrder ?? []);
+      if (token !== aiRequest.current || !tourLive.current) return; // exited or navigated away meanwhile
       const steps = aiTourSteps(payload.readingOrder, knownFiles);
       if (!steps) {
         setAiTourError("The AI overview did not name enough files for a tour. Keeping the measured tour.");
@@ -1268,12 +1309,17 @@ function DiagramInner({
       if (exportOpen || searchOpen || showConfirm || confirmDelete || moreOpen || lensMenuOpen || inferenceOpen) return;
       e.preventDefault();
       e.stopPropagation();
+      // The AI panel sits above the tour: Esc closes it first, arrows leave it alone.
+      if (aiOpen) {
+        if (e.key === "Escape") setAiOpen(false);
+        return;
+      }
       if (e.key === "Escape") exitTour();
       else stepTour(e.key === "ArrowRight" ? 1 : -1);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [tourActive, exportOpen, searchOpen, showConfirm, confirmDelete, moreOpen, lensMenuOpen, inferenceOpen, exitTour, stepTour]);
+  }, [tourActive, exportOpen, searchOpen, showConfirm, confirmDelete, moreOpen, lensMenuOpen, inferenceOpen, aiOpen, exitTour, stepTour]);
 
   /* Closing the export dialog returns focus to the button that opened it. */
   const closeExport = useCallback(() => {
@@ -1568,6 +1614,7 @@ function DiagramInner({
       <section
         className={`map-region ${isFading ? "is-fading" : ""} ${edges.some((edge) => edge.type === "routed") ? "has-routed-edges" : ""}`}
         ref={canvas}
+        tabIndex={-1}
         aria-label="Interactive dependency diagram"
       >
         <ReactFlow
@@ -1688,6 +1735,9 @@ function DiagramInner({
           )}
         </div>
 
+        <p className="sr-only" role="status" aria-live="polite">
+          {tourActive && tourSteps ? `Step ${tourIndex + 1} of ${tourSteps.length}: ${tourSteps[tourIndex].id}` : ""}
+        </p>
         {tourActive && tourSteps && (
           <TourCard
             ref={tourCard}
@@ -1840,7 +1890,7 @@ function DiagramInner({
           onNavigateToFile={navigateToNode}
           onNavigateToRegion={navigateToRegion}
           onOverviewLoaded={(order) => setAiReadingOrder(order ?? [])}
-          onStartTour={() => startTour("ai")}
+          onStartTour={aiSteps ? () => startTour("ai") : undefined}
         />
       )}
 

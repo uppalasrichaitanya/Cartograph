@@ -106,7 +106,6 @@ export function buildMeasuredTour(
   }
   for (const [, set] of importers) for (const from of set) outDegree.set(from, (outDegree.get(from) ?? 0) + 1);
 
-  const inDegree = (path: string) => importers.get(path)?.size ?? 0;
   const outDeg = (path: string) => outDegree.get(path) ?? 0;
   const regionOf = (path: string) => nodes.get(path)!.folder;
 
