@@ -10,12 +10,16 @@
 
 <p align="center">
   <strong>Verified dependency maps for real codebases.</strong><br />
-  Upload a repository. Read its architecture. Follow every measured edge.
+  Drop a zip or paste a GitHub link. Read its architecture. Follow every measured edge.
 </p>
 
 <p align="center">
-  <a href="https://cartograph-dev.vercel.app">Live demo</a> ·
+  <a href="https://cartograph-dev.vercel.app"><strong>Try it at cartograph-dev.vercel.app</strong></a>
+</p>
+
+<p align="center">
   <a href="#what-you-get">Features</a> ·
+  <a href="#the-guided-tour">Guided tour</a> ·
   <a href="#the-ai-guide">AI guide</a> ·
   <a href="#safety-and-limits">Safety</a> ·
   <a href="#run-locally">Run locally</a>
@@ -25,8 +29,9 @@
   <img src="public/readme/tour.gif" width="900" alt="Uploading a repository, opening a region, and asking the AI guide about it" />
 </p>
 
-Cartograph turns a JavaScript, TypeScript, Python, or Go repository into a
-shareable, interactive dependency map. Every edge on the map comes from an
+Cartograph turns a JavaScript, TypeScript, Python, or Go repository, uploaded
+as a `.zip` or fetched from a public GitHub link, into a shareable,
+interactive dependency map. Every edge on the map comes from an
 import statement in the source. Nothing is guessed from folder names, and
 uploaded code is never executed.
 
@@ -64,6 +69,26 @@ Confidence never increases as data moves through the pipeline.
 Inspect import cycles, dependency hubs ranked by how many files import them,
 and files nothing imports. Each observation traces back to the graph that
 produced it. Unlike measurements are never collapsed into one severity score.
+
+### Entry points and reachability
+
+Cartograph recognises where a repository starts and follows imports from
+there. Two lenses in **Observations** show the result:
+
+- **Entry points**, grouped by the rule that matched, so you can see why a
+  file counts as a start and disagree.
+- **Unreachable from entry points**: files with no import path from any
+  recognised entry point.
+
+Selecting a file also says, in the inspector, whether it is an entry point
+(and by which rule) or has no import path from one. See
+[Reachability](#reachability).
+
+### A guided tour
+
+Press **Take the tour →** on any map's overview to walk through the handful
+of files worth reading first, one step at a time. See
+[The guided tour](#the-guided-tour).
 
 ### An AI guide to unfamiliar code
 
@@ -124,8 +149,9 @@ link, not listed by search engines.
 3. Language parsers extract imports, declarations, and parse errors.
 4. The pipeline builds a validated intermediate representation and a
    deterministic dependency graph.
-5. Regions, observations, and layout are computed from that graph.
-6. The result is saved at `/repo/<id>` and can be shared directly.
+5. Entry points are recognised and reachability is computed over the graph.
+6. Regions, observations, and layout are computed from that graph.
+7. The result is saved at `/repo/<id>` and can be shared directly.
 
 The same repository always produces the same graph, ordering, and derived
 records.
@@ -147,6 +173,62 @@ available; structural guesses are recorded as lower-confidence evidence. Go
 package imports resolve to a deterministic representative file and are marked
 heuristic when the package has several source files.
 
+## Reachability
+
+Reachability answers one question: which files can be reached by following
+imports from where the repository starts?
+
+**Entry points** are found by recognised conventions, and each one records
+the rule that matched:
+
+| Source | Rules |
+| --- | --- |
+| `package.json` | `main`, `module`, `bin`, `browser`, and literal `exports` targets (a built `.js` target is traced back to its `.ts` source) |
+| Frameworks | Next.js `app/` and `pages/` routes, `middleware`, `proxy`, `instrumentation` |
+| Python | `pyproject.toml` scripts, `__main__.py`, `manage.py`, `wsgi.py`, `asgi.py`, `setup.py`, and `if __name__ == "__main__":` |
+| Go | `package main` |
+| Conventions | Root `index`/`main`/`server`/`app`/`cli` files, tests, config files, Storybook stories, examples, benchmarks, and scripts |
+
+A breadth-first search then follows resolved imports from those files. A file
+it never reaches is listed as having **no import path from any recognised
+entry point**. That is a measurement, not a verdict. The file may still be
+loaded by something the analysis cannot see, so the lens states what could
+hide a path:
+
+- files that use dynamic or non-literal `import()`/`require()`
+- internal imports that could not be resolved
+- a file-routed framework whose conventions Cartograph does not recognise
+  (a nested package using one is skipped, not reported)
+- wildcard `exports` patterns, whose matches may be public API
+
+With no recognised entry point there is nowhere to start, so nothing is
+reported rather than every file looking unreachable. The AI overview receives
+the same counts and caveats, and is told never to call a file dead or unused.
+
+## The guided tour
+
+**Take the tour →** appears on a map's overview once there are at least two
+steps worth taking. Each step moves the map to one file, opens its inspector,
+and says why the file is on the tour.
+
+![Step 4 of a measured tour of Cartograph's own repository: lib/storage/index.ts, imported by 13 source files across 3 regions, highlighted on the map with its inspector open](public/readme/guided-tour.png)
+
+A tour comes from one of two sources, and the card always says which:
+
+| Source | How the steps are chosen |
+| --- | --- |
+| Measured from the import graph | Up to 7 steps: one or two primary entry points (a package's `main` or `bin`, the root layout and page) ahead of API routes, exports subpaths, and scripts; then the most-imported files, spread across regions where possible; then the most connected file in each large region not yet visited. Tests, examples, docs, config, and type-only files are skipped. |
+| Guided by AI, with cited files | The AI overview's reading order, up to 10 steps. Files that are not in the analysis are dropped. |
+
+If an AI overview is already loaded, the tour follows its reading order.
+Otherwise it starts from the measured steps, and **Use AI reading order**
+switches over (this asks the AI provider). The AI panel's overview also has a
+**Take the tour** button.
+
+Use **Previous** and **Next** or the arrow keys, and **Esc** or **Exit tour**
+to leave. Each step has its own URL (`?tour=3`), so browser Back and Forward
+move through the tour, and a shared link opens the measured tour on that step.
+
 ## The AI guide
 
 Open **AI explain** to get a guided explanation of whatever you are looking
@@ -161,7 +243,8 @@ at:
 Each explanation starts with a short summary, is organized into sections, and
 ends with a reading order: the files to open first, and why. Every point links
 to the files, imports, or regions it rests on, and clicking one moves the map
-there.
+there. The repository overview's reading order can be walked as a
+[guided tour](#the-guided-tour).
 
 ![The AI guide panel explaining the lib/ai region: a summary, its role, and key files](public/readme/ai-guide.png)
 
@@ -374,7 +457,7 @@ trace.
 npm test
 npm run lint
 npm run build
-npm run test:e2e   # browser smoke test: upload, map, AI panel, export, delete
+npm run test:e2e   # browser tests: upload, map, AI panel, export, delete, guided tour
 ```
 
 The test suite covers parser conformance, IR validation, deterministic layout,
@@ -386,12 +469,15 @@ navigation, and visual foundations.
 ```text
 app/                              Next.js pages and API routes
 components/                       Map, search, upload, AI, and workspace UI
-lib/analysis/                     Discovery, parsing, orchestration, rendering
+lib/analysis/                     Discovery, parsing, entry points, reachability, rendering
 lib/analysis/analyzers/           Capability-aware analyzer plugins
 lib/analysis/architecture-model/  Deterministic boundaries and inference
 lib/analysis/ir/                  Versioned intermediate representation
 lib/analysis/parsers/             Language parsers behind one registry
 lib/ai/                           Evidence building, providers, grounding
+lib/diagram/                      Presentation figures, SVG/PNG and Mermaid export
+lib/github/                       Public GitHub link parsing and archive download
+lib/workspace/                    Map navigation, URLs, search, and the guided tour
 lib/safety/                       Archive validation, resource guards, rate limits
 lib/storage/                      Local filesystem and Vercel Blob backends
 tests/                            node:test suites

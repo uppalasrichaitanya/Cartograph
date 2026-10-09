@@ -112,6 +112,15 @@ async function main() {
   writeFileSync(path.join(OUT, "architecture.mmd"), await diagram("format=mermaid"));
   if (process.env.SLIDE_PREVIEW) writeFileSync(process.env.SLIDE_PREVIEW, await diagram("preset=slide&theme=dark"));
 
+  // The measured tour, a few steps in, where it reaches a hub rather than an entry point.
+  // After the GIF's last mark, so the GIF is unchanged.
+  await page.goto(`${BASE}/repo/${id}`);
+  await page.getByRole("button", { name: /Take the tour/ }).click();
+  const tourCard = page.getByRole("region", { name: "Guided tour" });
+  for (let step = 1; step < 4; step++) await tourCard.getByRole("button", { name: "Next" }).click();
+  await page.waitForTimeout(1_800);
+  await shoot(page, "guided-tour.png");
+
   await context.close();
   await browser.close();
 
